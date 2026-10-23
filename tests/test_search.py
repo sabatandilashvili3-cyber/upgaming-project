@@ -53,9 +53,22 @@ def test_analyse_dates_and_ids():
     assert analyse("what happened on 14 March 2026").window == ("2026-03-14", "2026-03-14")
     assert analyse("what may have caused the market decline").window is None
     assert analyse("How long did INC-2026-016 last?").ids == ["INC-2026-016"]
+    assert analyse("changes in 2026-04").window == ("2026-04-01", "2026-04-30")
+
+
+def test_analyse_ignores_seasons_and_impossible_dates():
+    assert analyse("Who won the 2014-15 Premier League?").window is None      # month 15 is not a month
+    assert analyse("the 2010-11 season").window is None                       # a season, not November 2010
+    assert analyse("on 2026-13-40").window is None
 
 
 def test_boost_promotes_in_window_and_demotes_out_of_window():
     meta = {"in": {"dates": ["2026-03-14"]}, "out": {"dates": ["2026-04-02"]}, "timeless": {}}
     ranked = boost([("out", 1.0), ("timeless", 0.9), ("in", 0.8)], meta.get, analyse("delays in March 2026"))
     assert [c for c, _ in ranked] == ["in", "timeless", "out"]
+
+
+def test_diversify_moves_extra_rows_of_one_file_back():
+    from engine.search.retriever import diversify
+    ranked = [("t.json#1::0", 5), ("t.json#2::0", 4), ("t.json#3::0", 3), ("pm.md::0", 2), ("hp::A::0", 1)]
+    assert [c for c, _ in diversify(ranked, 2)] == ["t.json#1::0", "t.json#2::0", "pm.md::0", "hp::A::0", "t.json#3::0"]

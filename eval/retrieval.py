@@ -5,7 +5,9 @@ Configs compared (the brief asks for at least two):
   B  fixed chunks,      BM25 only
   C  fixed chunks,      hybrid (RRF)
   D  structural chunks, hybrid (RRF)
-  E  structural chunks, hybrid + id/time boost       <- the engine's default
+  E  structural chunks, hybrid + id/time boost
+  F  E + a second hop that follows ids found in the top results (engine/search/chain.py)
+  G  F + at most 2 rows of the same file in front (source diversity)
 
 Questions: every Meridian world question that has gold evidence, plus a seeded
 sample of HotpotQA questions. All of them search the *whole* corpus (Wikipedia
@@ -24,6 +26,7 @@ import numpy as np
 
 from engine.ingest.records import Chunk
 from engine.search.dense import DEFAULT_MODEL, Embedder
+from engine.search.chain import chained_search
 from engine.search.retriever import Retriever, SearchConfig, doc_ranking
 
 from .build_index import CACHE, slug
@@ -39,6 +42,8 @@ CONFIGS = {
     "C": ("fixed", SearchConfig(mode="hybrid", boost=False)),
     "D": ("structural", SearchConfig(mode="hybrid", boost=False)),
     "E": ("structural", SearchConfig(mode="hybrid", boost=True)),
+    "F": ("structural", SearchConfig(mode="hybrid", boost=True)),      # + chained second hop
+    "G": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2)),   # + chained, diversified
 }
 
 
@@ -80,7 +85,11 @@ def evaluate(configs, n_hotpot, model=DEFAULT_MODEL, k_values=(5, 10)):
         t0 = time.time()
         for q, qv in zip(questions, qvecs):
             gold = [aliases.get(g, g) for g in q["gold"]]
-            ranking = doc_ranking(retriever.search(q["question"], cfg, qvec=qv))
+            if name in ("F", "G"):
+                hits, _ = chained_search(retriever, q["question"], cfg, qvec=qv)
+            else:
+                hits = retriever.search(q["question"], cfg, qvec=qv)
+            ranking = doc_ranking(hits)
             m = {f"recall@{k}": recall_at_k(ranking, gold, k) for k in k_values}
             m.update({f"all_gold@{k}": all_gold_at_k(ranking, gold, k) for k in k_values})
             m["mrr"] = mrr(ranking, gold)

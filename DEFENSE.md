@@ -403,10 +403,51 @@ are computed on *documents*:
 | C | fixed | hybrid |
 | D | structural | hybrid |
 | E | structural | hybrid + boost |
+| F | structural | E + a second hop that follows ids (`engine/search/chain.py`) |
+| G | structural | F + at most 2 rows of one file in front |
 
 - **A vs B vs C:** does hybrid beat either alone?
 - **C vs D:** does the chunking strategy matter?
 - **D vs E:** does the boost help?
+- **E vs F vs G:** does following ids help, and does limiting rows per file help?
+
+### Retrieval results (539 questions: 500 HotpotQA + 39 Meridian; `python -m eval.retrieval --hotpot 500`)
+
+The whole corpus (Wikipedia + company, ~62k records) is searched for every question.
+
+| Config | | HotpotQA recall@10 | HotpotQA MRR | Meridian recall@5 | Meridian recall@10 | Meridian MRR |
+|---|---|---|---|---|---|---|
+| A | fixed, dense only | 0.842 | 0.922 | 0.109 | 0.173 | 0.099 |
+| B | fixed, BM25 only | 0.764 | 0.787 | 0.186 | 0.622 | 0.198 |
+| C | fixed, hybrid | 0.865 | 0.896 | 0.199 | 0.295 | 0.306 |
+| D | structural, hybrid | 0.864 | 0.921 | 0.220 | 0.357 | 0.291 |
+| E | D + id/time boost | 0.864 | 0.921 | 0.479 | 0.720 | 0.532 |
+| F | E + second hop following ids | 0.864 | 0.921 | 0.483 | 0.720 | **0.665** |
+| G | F + max 2 rows per file in front | 0.864 | 0.920 | **0.628** | **0.769** | 0.568 |
+
+**What the numbers say (each is a sentence you can say in the interview):**
+- **Embeddings alone fail on investigations.** On HotpotQA dense search is strong (MRR 0.92),
+  but on Meridian it finds 17% of the evidence: ids and dates are noise to a sentence model.
+  BM25 alone finds 62%.
+- **Hybrid is not automatically better.** On Meridian, equal-weight RRF (C, 0.295) is *worse*
+  than BM25 alone (B, 0.622): when one retriever is useless for a question type, fusion dilutes
+  the good one. On Wikipedia hybrid wins (0.865 vs 0.842 dense). The id/time boost (E) is what
+  fixes the investigation case: 0.357 → 0.720.
+- **Structural chunking helps ranking, not coverage.** C → D: HotpotQA MRR 0.896 → 0.921 (the
+  title line tells the model what each paragraph is about); recall@10 is flat.
+- **The boost costs Wikipedia nothing.** D → E: HotpotQA identical, because Wikipedia questions
+  rarely contain ids or dates, so the boost doesn't fire.
+- **Some questions can't be answered by one search, whatever the quality.** "Which change caused
+  INC-2026-004?": the answer row CHG-2458 never mentions INC-2026-004; only the postmortem links
+  them. The second hop (F) lifts MRR on simple Meridian questions from 0.19 to 0.52.
+- **Duplicates of a kind crowd out evidence.** 3-5 complaint tickets per incident all mention its
+  id, all get boosted, and fill the top 5. Capping rows per file (G) raises Meridian recall@5
+  from 0.48 to 0.63 and multi-hop recall@5 from 0.06 to 0.44, at some MRR cost (0.665 → 0.568).
+  **G is the default:** the agent reads all top results, so finding evidence matters more than
+  its exact position.
+- **Honest caveat:** Meridian groups have 6-8 questions each, so one question moves a group's
+  number by 0.12-0.17. The overall Meridian line (n = 39) and HotpotQA (n = 500) are the
+  reliable ones. Every table prints n.
 
 **Answer eval (next step):**
 - HotpotQA: exact match and F1 against the gold answer.

@@ -34,6 +34,9 @@ class QueryFacts:
 
 
 def _month_window(y, m, d=None):
+    """Inclusive (first, last) day strings, or None when the numbers are not a real date."""
+    if not 1 <= m <= 12 or (d is not None and not 1 <= d <= 31):
+        return None
     if d:
         day = f"{y:04d}-{m:02d}-{d:02d}"
         return day, day
@@ -55,7 +58,8 @@ def analyse(query: str, default_year: int = 2026) -> QueryFacts:
         facts.window = _month_window(int(m[2]), MONTHS[m[1]])
     elif m := re.search(r"\b(?:in|during|since|throughout|of)\s+" + MONTH, q):         # "in March"
         facts.window = _month_window(default_year, MONTHS[m[1]])
-    elif m := re.search(r"\b(20\d\d)-(\d\d)\b", q):                                # 2026-03
+    elif (m := re.search(r"\b(20\d\d)-(\d\d)\b(?!-)", q)) and \
+            int(m[2]) != (int(m[1]) + 1) % 100:                                   # 2026-03, not the 2014-15 season
         facts.window = _month_window(int(m[1]), int(m[2]))
     return facts
 
