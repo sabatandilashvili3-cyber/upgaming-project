@@ -129,6 +129,10 @@ class Store:
                              (list(ids),)).fetchall()
         return {r["chunk_id"]: r for r in rows}
 
+    def search(self, qvec: np.ndarray, k: int = 50):
+        """Same interface as MemoryIndex.search, so the Retriever can use either."""
+        return self.dense_search(qvec, k)
+
     def dense_search(self, qvec: np.ndarray, k: int = 50, ef_search: int = 100):
         """Nearest chunks by cosine distance through the HNSW index."""
         with self.tx() as c:

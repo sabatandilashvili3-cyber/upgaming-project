@@ -38,15 +38,18 @@ class Hit:
 
 
 class Retriever:
-    def __init__(self, chunks, vectors: np.ndarray, embedder):
+    def __init__(self, chunks, dense, embedder):
+        """dense: a vectors matrix (searched in memory) or any object with .search(qvec, k),
+        such as the pgvector-backed Store."""
         self.chunks = {c.chunk_id: c for c in chunks}
         ids = [c.chunk_id for c in chunks]
         self.bm25 = BM25().build(ids, [c.text for c in chunks])
-        self.dense = MemoryIndex(ids, vectors)
+        self.dense = MemoryIndex(ids, dense) if isinstance(dense, np.ndarray) else dense
         self.embedder = embedder
 
     def _meta(self, cid):
-        return self.chunks[cid].meta
+        c = self.chunks.get(cid)
+        return c.meta if c else {}
 
     def search(self, query: str, cfg: SearchConfig = SearchConfig(), qvec: np.ndarray | None = None):
         kw, dn = [], []
@@ -66,7 +69,9 @@ class Retriever:
         dn_rank = {c: r for r, c in enumerate(dn, 1)}
         hits, by_doc = [], {}
         for cid, score in ranked:
-            c = self.chunks[cid]
+            c = self.chunks.get(cid)
+            if c is None:                       # deleted since this index was built
+                continue
             twin = c.meta.get("near_duplicate_of")
             if cfg.collapse and twin and twin in by_doc:
                 by_doc[twin].also_in.append(c.doc_id)
