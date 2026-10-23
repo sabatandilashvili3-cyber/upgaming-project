@@ -8,3 +8,4 @@ data/raw/
 data/corpus/
 data/cache/
 eval/results/*.jsonl
+data/pgdata/

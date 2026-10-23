@@ -63,6 +63,12 @@ def minhash(sh: set) -> np.ndarray:
     return ((x[:, None] * _A + _B) % np.uint64(_PRIME)).min(axis=0)
 
 
+def lsh_keys(sig: np.ndarray):
+    """[(band, key)] with each band of 4 minimums hashed to one signed 64-bit int (fits a Postgres bigint)."""
+    return [(b, int.from_bytes(hashlib.blake2b(sig[b * ROWS:(b + 1) * ROWS].tobytes(), digest_size=8).digest(),
+                               "big", signed=True)) for b in range(BANDS)]
+
+
 def find_duplicates(records):
     """Return {doc_id: (kept_doc_id, "exact" | "near", similarity)} for every duplicate.
 
@@ -80,7 +86,7 @@ def find_duplicates(records):
         seen_hash[h] = rec.doc_id
         sh = shingles(rec.text)
         sig = minhash(sh)
-        keys = [(b, sig[b * ROWS:(b + 1) * ROWS].tobytes()) for b in range(BANDS)]
+        keys = lsh_keys(sig)
         candidates = {other for key in keys for other in buckets[key]}
         best = max(((jaccard(sh, kept_shingles[o]), o) for o in candidates), default=(0.0, None))
         if best[0] >= THRESHOLD:
