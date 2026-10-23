@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+# generated / downloaded data (reproducible from scripts, never committed)
+data/raw/
+data/corpus/
+data/cache/
+eval/results/*.jsonl
