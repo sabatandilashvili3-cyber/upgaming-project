@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .records import Record
 
-ID_RE = re.compile(r"\b[A-Z]{2,5}-\d{3,5}(?:-\d{2,4})?\b")      # INC-2026-016, CHG-3340, TCK-2026-03-0012
+ID_RE = re.compile(r"\b[A-Z]{2,5}(?:-\d{2,5})+\b")      # INC-2026-016, CHG-3340, TCK-2026-03-0012
 DATE_RE = re.compile(r"\b(20\d\d)-(0[1-9]|1[0-2])-([0-2]\d|3[01])\b")
 
 
