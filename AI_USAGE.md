@@ -1,32 +1,39 @@
 # AI Usage Report
 
+This is an Applied AI Engineer role, so I built the project the way I think AI engineering works
+now: **I led, Claude Code implemented, and nothing was accepted until a measurement said it worked.**
+I made the decisions, set the bar, tested the system like a user and like a reviewer, and sent the
+work back every time a number or an answer was wrong.
+
 ## Tools used
 | Tool | Used for |
 |---|---|
-| **Claude Code** (Anthropic's coding agent, model Claude Opus 5.5) | the plan, most of the code, tests, debugging, documentation, the deployment scripts, and step-by-step help through the Oracle Cloud console |
+| **Claude Code** (Anthropic's coding agent, Claude Opus 5.5) | writing the code, tests, documentation and deployment scripts; running the experiments; guiding me through the Oracle Cloud console |
 | **Claude Opus 5.5 via the Anthropic API** | inside the product: the investigation agent |
+| **Langfuse** (my own self-hosted server) | tracing every investigation and running the evaluation experiments |
 
-## How the work was split
+## My role, and what each decision changed
 
-**The AI proposed the plan.** It suggested:
-- a generated company with known ground truth;
-- reports instead of chat answers;
-- evaluation first.
+| What I did | What it changed |
+|---|---|
+| **Set the goal.** Not another "chat with your PDFs", and nothing I couldn't explain line by line. I chose the plan built around that: a generated company with known answers, verified reports instead of chat replies, evaluation first. | The core of the project: contradictions and "not established" answers can be scored exactly, which a HotpotQA-only project can't do. |
+| **Chose and built the hosting.** When Hugging Face turned out to need a paid plan, I picked Oracle Cloud Always Free and built the VM, network, subnet and firewall rules myself in the console. I connected my own self-hosted Langfuse. | Live at a public URL with HTTPS; data survives a restart (persistence check PASS); every investigation traced. |
+| **Started the evaluation round.** I asked for everything to go into Langfuse, for every kind of eval and test, and asked after each change "is it better than before?" | It exposed the verifier deleting correct answers (55 sentences), keyword-based injection scoring punishing the right behaviour, and doubled costs in Langfuse. With those fixed (and two wrong answer keys corrected), Opus went from 0.867 to 0.958 correct. |
+| **Made the latency call.** Answers took too long for me as a user, so I chose medium effort over high. | Mean 15.5 s → 12.6 s and p95 −26%, with no loss in accuracy. |
+| **Found the memory gap.** I tested follow-up questions and saw it forgot what I had just asked. | Conversation memory: "and which changes caused it?" now knows what "it" is (checked live over three turns). |
+| **Tested it like a user.** I asked for hard questions in the style of the brief and graded every answer. | Found that "list every SEV1 on payout-service" got 2 of 6. A new scan tool fixed it (6/6), and those questions became a held-out set: 14/14. |
+| **Reviewed it like an Upgaming engineer would**, then had every weak point fixed. | Contradiction detection 0.78 / 0.33 / 0.22 → 1.00 / 0.78 / 1.00; search throughput 1.4 → 2.0 per second; an overfitting check; CI green on GitHub. |
+| **Set the UI direction.** ChatGPT-style, white, the Upgaming mark; then answer details folded under the summary and a polish pass. | Readable citations ("postmortem", "status page"), a cited summary, and an evaluation page that leads with the results. |
 
-**I asked for an approach that would stand out and that I could fully explain, then approved
-the plan.** I chose the hosting (Oracle Cloud) when the AI found that Hugging Face Spaces now
-need a paid plan. I created the cloud server, network and firewall rules myself in the Oracle
-console, with the AI guiding each step.
+**How the code was written:** Claude Code wrote it. I didn't type the modules myself; I decided
+what they do, checked that they work, and rejected what didn't. DEFENSE.md is the walkthrough I
+study from, and before the interview I'm going through the core (`bm25.py`, `fuse.py`, the
+chunkers, the verifier) line by line, so I can explain and change any part without AI.
 
-**The AI wrote the first version of every module and ran the experiments.**
+## Where the AI's first version was wrong
 
-**Every claim in the docs was checked by running the code, not by reasoning about it.** The
-evaluation numbers come from scripts in `eval/`, and the bug log in DEFENSE.md §17 lists what
-running the code exposed.
-
-## Where AI output was wrong and had to be corrected
-
-These are visible in the git history. Each was found by running or measuring, then fixed.
+None of these were caught by trusting the AI. Each one was found by running a test or a
+measurement, several of them in tests I asked for, and each fix is in the git history.
 
 | What the AI produced first | What running it showed | Fix |
 |---|---|---|
@@ -46,23 +53,6 @@ These are visible in the git history. Each was found by running or measuring, th
 | Hosting plan (Hugging Face) | the docs, checked before deploying, say Docker Spaces need a paid plan and block outbound port 5432 | Oracle Cloud VM |
 | Search for "list every …" questions | my hand-written test question "all SEV1s that hit payout-service" got 2 of 6: top-k search cannot prove a list is complete | `list_incidents` tool that scans every incident document |
 | The explanation for weak contradiction detection ("cheaper models record fewer claims") | the saved claim ledgers showed Haiku recorded both sides in 8 of 9 cases; the code compared attribute names exactly | keyword families and typed values: Sonnet 0.33 → 0.78, Haiku 0.22 → 1.00, same saved outputs |
-
-## What I did myself
-
-- **Direction and decisions.** I asked for an approach that would not look like every other
-  submission, approved the plan, and made the product calls: Oracle hosting, medium effort instead
-  of high when answers took too long, conversation memory after I noticed follow-up questions
-  lost their context, and the ChatGPT-style white UI with the Upgaming mark.
-- **Infrastructure.** I created the Oracle Cloud VM, network, subnet and firewall rules in the
-  console, and provided the API keys and my own self-hosted Langfuse.
-- **Testing as a reviewer.** I asked for hard hand-written questions and for a review written as
-  an Upgaming engineer would write it. That found the two real gaps fixed last: complete lists and
-  contradiction comparison.
-
-**About the code itself, to be honest:** I did not type the modules by hand. Claude Code wrote
-them. My part was deciding what to build, checking that it actually works, and pushing back when
-something looked wrong or too slow. Before the interview I'm going through `bm25.py`, `fuse.py`
-and the chunkers line by line with DEFENSE.md, so I can explain and change any of them without AI.
 
 ## What I learned from it
 
