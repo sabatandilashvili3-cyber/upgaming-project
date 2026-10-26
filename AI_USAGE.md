@@ -59,10 +59,34 @@ These are visible in the git history. Each was found by running or measuring, th
   an Upgaming engineer would write it. That found the two real gaps fixed last: complete lists and
   contradiction comparison.
 
-> **TO FILL IN before submitting:** any code you rewrote by hand (planned: `engine/search/bm25.py`,
-> `engine/search/fuse.py`, `engine/ingest/chunking.py`, then run the tests) and the bug-finding
-> drills. Only list what you really did.
+**About the code itself, to be honest:** I did not type the modules by hand. Claude Code wrote
+them. My part was deciding what to build, checking that it actually works, and pushing back when
+something looked wrong or too slow. Before the interview I'm going through `bm25.py`, `fuse.py`
+and the chunkers line by line with DEFENSE.md, so I can explain and change any of them without AI.
 
 ## What I learned from it
-> **TO FILL IN** in your own words: for example, why hybrid search needed the boost, and why the
-> contradiction check is code and not a prompt.
+
+- **Search by meaning alone is not enough.** Embeddings can't tell `CHG-3340` from `CHG-3341`. I
+  expected hybrid search to win automatically, but at first it was worse than plain keyword search
+  on the company questions (0.295 vs 0.622). It only won after the id and date boost. So mixing two
+  methods doesn't help by itself; you have to check what each one is good at.
+- **Measure, don't guess.** The re-ranker made Wikipedia answers better and broke the company
+  ones. int8 quantisation sounded like an easy speed-up and was slower on the ARM server. Almost
+  every "obvious" improvement needed a number before I could trust it.
+- **Before blaming the model, look at what it actually did.** We thought the cheaper models were
+  bad at finding contradictions. When we opened their saved answers, they had recorded both sides;
+  our code just compared the attribute names too strictly. Fixing about 30 lines of our own code
+  took Haiku from 0.22 to 1.00.
+- **RAG can't answer "list every…" questions on its own.** Search returns the top results, not all
+  of them. I only found this by testing it like a user would, with my own hard questions. The fix
+  was a tool that scans every incident instead of searching.
+- **A score on your own generated questions can lie.** We got 1.000 on the company questions, but
+  the same generator wrote the documents and the questions. The hand-written held-out questions are
+  the more honest check.
+- **Let the model write, let code decide.** The contradiction check and the sentence verifier are
+  plain Python, so they can be tested and explained, and they can't make things up. But the first
+  version of the verifier was too strict and deleted correct answers, so even the safety layer
+  needs its own evaluation.
+- **Production is its own work.** Keeping keys out of git, data that survives a restart, a budget
+  limit, the load test that found a 165-second delete. And latency is a product decision: I chose
+  medium effort because waiting 20+ seconds felt too long, and the eval showed it cost no accuracy.
