@@ -126,6 +126,15 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 .thinking[open] summary .icon { transform: rotate(90deg); }
 .thinking ol { margin: 8px 0 0; padding-left: 22px; color: var(--ink-3); font-size: 13px; }
 .thinking li { margin-bottom: 4px; }
+/* live steps: only the latest few, one line each; older ones fade out and are counted above */
+.thinking .earlier { font-size: 12.5px; color: var(--ink-3); margin: 8px 0 0 22px; }
+.thinking .earlier:empty { display: none; }
+.thinking ul.live { list-style: none; margin: 6px 0 0; padding-left: 22px; color: var(--ink-3); font-size: 13px; }
+.thinking ul.live li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 24px;
+  animation: step-in .25s ease both; transition: opacity .3s ease, max-height .3s ease, margin .3s ease; }
+.thinking ul.live li:last-child { color: var(--ink-2); }
+.thinking ul.live li.leaving { opacity: 0; max-height: 0; margin-bottom: 0; }
+@keyframes step-in { from { opacity: 0; transform: translateY(4px); } }
 .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink);
          animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
@@ -464,7 +473,7 @@ async function ask() {
   if (!conversationId) conversationId = newId();
   const turn = newTurn(question);
   const a = turn.querySelector(".a");
-  a.innerHTML = `<details class="thinking" open><summary><span class="pulse"></span> Investigating</summary><ol></ol></details>`;
+  a.innerHTML = `<details class="thinking" open><summary><span class="pulse"></span> Investigating</summary><div class="earlier"></div><ul class="live"></ul></details>`;
   turn.scrollIntoView({block: "start", behavior: "smooth"});
   const steps = [];
   try {
@@ -478,12 +487,22 @@ async function ask() {
         const block = buf.slice(0, i); buf = buf.slice(i + 2);
         const kind = (block.match(/^event: (.*)$/m) || [])[1];
         const data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || "null");
-        if (kind === "tool") { steps.push(data); a.querySelector("ol")?.insertAdjacentHTML("beforeend", `<li>${stepText(data)}</li>`); }
+        if (kind === "tool") { steps.push(data); addLiveStep(a, data, steps.length); }
         if (kind === "report") { renderAnswer(turn, data, steps); loadHistory(); }
       }
     }
   } catch (e) { a.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
   busy = false; grow();
+}
+// while investigating, show the latest few steps; the full list stays in the "N steps" toggle afterwards
+const LIVE_STEPS = 4;
+function addLiveStep(a, s, n) {
+  const ul = a.querySelector(".live"); if (!ul) return;
+  ul.insertAdjacentHTML("beforeend", `<li title="${esc(stepText(s).replace(/<[^>]+>/g, ""))}">${stepText(s)}</li>`);
+  const shown = [...ul.children].filter(li => !li.classList.contains("leaving"));
+  if (shown.length > LIVE_STEPS) { const old = shown[0]; old.classList.add("leaving"); setTimeout(() => old.remove(), 300); }
+  const hidden = n - LIVE_STEPS;
+  a.querySelector(".earlier").textContent = hidden > 0 ? `${hidden} earlier step${hidden > 1 ? "s" : ""}` : "";
 }
 function stepText(s) {
   const i = s.input || {};
@@ -491,6 +510,10 @@ function stepText(s) {
   if (s.name === "read_document") return `Read ${esc(i.doc_id)}`;
   if (s.name === "timeline") return `Built a timeline for “${esc(i.term)}”, ${esc(i.start)} to ${esc(i.end)}`;
   if (s.name === "record_claims") return `Recorded ${(i.claims || []).length || "the"} claims from the sources`;
+  if (s.name === "list_incidents") {
+    const f = [i.severity, i.service, i.start && i.end ? `${i.start} to ${i.end}` : i.start || i.end].filter(Boolean);
+    return `Listed every incident${f.length ? ": " + esc(f.join(", ")) : ""}`;
+  }
   return esc(s.name);
 }
 
