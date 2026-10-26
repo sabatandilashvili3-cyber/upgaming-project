@@ -16,6 +16,7 @@ a burst of parallel eval traces once, and it also serves HSAI.
 import argparse
 import json
 import threading
+import time
 
 from dotenv import load_dotenv
 from langfuse import Evaluation
@@ -41,16 +42,35 @@ def question_sets(names):
     return {n: out[n] for n in names}
 
 
+def _retry(fn, attempts=4):
+    """Langfuse API calls can time out when its server is busy; back off and try again."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:                      # httpx timeouts surface as several exception types
+            if i == attempts - 1:
+                raise
+            wait = 5 * 2 ** i
+            print(f"  langfuse call failed ({type(e).__name__}); retrying in {wait}s", flush=True)
+            time.sleep(wait)
+
+
 def upload(lf, name, questions):
+    """Create the dataset and any missing items. Idempotent: existing items are skipped."""
     try:
-        lf.create_dataset(name=name, description=f"investigation-engine question set {name}")
+        existing = {it.id for it in _retry(lambda: lf.get_dataset(name)).items}
     except Exception:
-        pass                                            # already exists
+        _retry(lambda: lf.create_dataset(name=name, description=f"investigation-engine question set {name}"))
+        existing = set()
     for q in questions:
-        lf.create_dataset_item(dataset_name=name, id=f"{name}:{q['qid']}", input={"question": q["question"]},
-                               expected_output={k: q.get(k) for k in ("answer", "must_include", "expect_abstain",
-                                                                      "contradiction", "gold_doc_ids", "forbidden")},
-                               metadata={"qid": q["qid"], "kind": q["kind"], "source": q["source"]})
+        item_id = f"{name}:{q['qid']}"
+        if item_id in existing:
+            continue
+        _retry(lambda: lf.create_dataset_item(
+            dataset_name=name, id=item_id, input={"question": q["question"]},
+            expected_output={k: q.get(k) for k in ("answer", "must_include", "expect_abstain", "contradiction",
+                                                   "gold_doc_ids", "forbidden")},
+            metadata={"qid": q["qid"], "kind": q["kind"], "source": q["source"]}))
     lf.flush()
 
 
@@ -87,7 +107,7 @@ def main():
         upload(lf, ds_name, questions)
         by_qid = {q["qid"]: q for q in questions}
         wanted = {f"{ds_name}:{q['qid']}" for q in questions}
-        items = [it for it in lf.get_dataset(ds_name).items if it.id in wanted]
+        items = [it for it in _retry(lambda: lf.get_dataset(ds_name)).items if it.id in wanted]
 
         # the attack documents exist only in red-team runs: the live demo and the main eval stay clean
         retriever = with_attacks(chunks, vecs, embedder) if set_name == "redteam" else clean
