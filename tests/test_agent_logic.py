@@ -61,6 +61,9 @@ def test_numbers_match_whole_not_as_substrings():
     ev = {"c1": "reduce pool max_connections 240 -> 60"}
     assert not check("The pool was cut to 24.", ["c1"], ev).supported
     assert check("The pool was cut from 240 to 60.", ["c1"], ev).supported
+    # found on the live server: the cited text ended "240 -> 60." and the full stop hid the 60
+    assert check("CHG-3340 cut the pool 240 -> 60.", ["c2"], {"c2": "Root cause: CHG-3340 pool 240 -> 60."}).supported
+    assert not check("It was 60.", ["c3"], {"c3": "measured 60.5 ms"}).supported
 
 
 def test_verifier_accepts_grounded_sentence():

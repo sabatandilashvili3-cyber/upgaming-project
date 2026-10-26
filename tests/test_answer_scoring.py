@@ -48,3 +48,10 @@ def test_draft_shape():
     assert draft_as_report(None)["status"] == "abstained"
     d = draft_as_report({"answerable": True, "findings": [{"text": "x", "citations": ["E1"]}], "summary": "s"})
     assert d["status"] == "answered" and d["summary"] == "s"
+
+
+def test_timing_conflict_filed_as_end_time_counts():
+    from eval.answers import contradiction_found
+    seen = [{"attribute": "end_time", "values": [{"value": "2026-03-14 12:52 UTC"}, {"value": "11:12 UTC"}]}]
+    assert contradiction_found({"attribute": "duration", "values": ["220 minutes", "120 minutes"]}, seen) == 1.0
+    assert contradiction_found({"attribute": "impact", "values": ["34%", "54%"]}, seen) == 0.0

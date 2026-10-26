@@ -38,7 +38,8 @@ def _squash(s: str) -> str:
 def _present(fact: str, corpus: str) -> bool:
     """Plain numbers must match whole: an invented "24" must not pass because "240" is cited."""
     if re.fullmatch(r"[\d.]+", fact):
-        return re.search(rf"(?<![\d.]){re.escape(fact)}(?![\d.])", corpus) is not None
+        # a digit or a decimal part may not touch it; a sentence's full stop may ("240 -> 60.")
+        return re.search(rf"(?<!\d)(?<!\d\.){re.escape(fact)}(?!\d)(?!\.\d)", corpus) is not None
     return fact in corpus
 
 
