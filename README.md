@@ -124,6 +124,7 @@ python -m eval.answers --hotpot 40              # answer eval, costs money, asks
 | POST | `/api/search` | retrieval only; each hit shows its keyword and semantic rank |
 | POST | `/api/investigate` | server-sent events: each step, then the verified report |
 | GET | `/api/traces`, `/api/traces/{id}` | past investigations with tokens, cost and latency |
+| GET | `/api/conversations`, `/api/conversations/{id}` | conversations (follow-up questions grouped) and all their turns |
 | GET | `/api/eval` | evaluation summaries |
 
 ## Known limitations

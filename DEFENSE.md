@@ -652,6 +652,31 @@ That's about 300 MB, then measure that retrieval quality is unchanged.
 code. "Did the report adopt the claim or report it?" is a question of meaning. The judge must
 quote its evidence, and it was checked against hand labels.
 
+## 21. Conversation memory (follow-up questions) — `investigator.py`, `app.py`
+
+**Found from use:** two follow-ups ("how much revenue did it generate", "tell me for nfl") were
+investigated as if they were first questions. The chat-style page invited a conversation the
+engine didn't have.
+
+**How it works:**
+- **Conversation records:** every question is stored with a `conversation_id`. The server
+  rebuilds the history from its own records; the client only sends the id, so a client can't
+  inject a fake "earlier answer".
+- **What the model sees:** the last 3 questions and their *verified* summaries go to the model,
+  labelled "use it to understand what the new question refers to; it is NOT evidence". A
+  follow-up still has to cite documents for every fact, so a wrong earlier answer can't spread
+  as "fact".
+- **The first search:** the prefetched search carries the ids from the previous turn, so "how
+  much revenue did it generate" searches for INC-2026-016 and not for "it".
+- **The cache key includes the history:** the same words in two conversations mean different
+  things.
+
+**Checked live:**
+1. "How long did INC-2026-016 last?" → 220 min (and the status-page conflict).
+2. "how much revenue did it generate" → it understood "it" = INC-2026-016 and abstained (no
+   figure exists).
+3. "and which changes caused it?" → CHG-3340 and CHG-3357.
+
 ## Still to do
 - the short-answer prompt (the bare span, for HotpotQA EM/F1);
 - make claim recording mandatory for cheaper models;
