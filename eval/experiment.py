@@ -85,6 +85,7 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--retrieval", choices=["G", "H-routed"], default="H-routed",
                     help="G = without the cross-encoder (the v2 model-comparison runs used G)")
+    ap.add_argument("--no-prefetch", action="store_true", help="let the model run the first search itself")
     ap.add_argument("--yes", action="store_true")
     a = ap.parse_args()
 
@@ -121,7 +122,7 @@ def main():
 
         def task(*, item, **kw):
             q = by_qid[item.metadata["qid"]]
-            inv = Investigator(llm, retriever).run(q["question"], tags=["eval", a.run, set_name])
+            inv = Investigator(llm, retriever, prefetch=not a.no_prefetch).run(q["question"], tags=["eval", a.run, set_name])
             r = inv.report
             row = {"qid": q["qid"], "source": q["source"], "kind": q["kind"], "run": a.run, "model": a.model,
                    "effort": a.effort, "status": inv.status, "error": inv.error, "cost_usd": inv.cost_usd,
@@ -151,7 +152,8 @@ def main():
 
         lf.run_experiment(name=a.run, run_name=a.run, description=f"{a.model} effort={a.effort}",
                           data=items, task=task, evaluators=[evaluator], max_concurrency=1,
-                          metadata={"model": a.model, "effort": a.effort, "retrieval": a.retrieval})
+                          metadata={"model": a.model, "effort": a.effort, "retrieval": a.retrieval,
+                                    "prefetch": str(not a.no_prefetch)})
         lf.flush()
 
     summary = {"verified": summarise(rows, "verified"), "unverified": summarise(rows, "unverified")}

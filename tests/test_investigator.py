@@ -42,9 +42,9 @@ CLAIMS = tools(call("record_claims", 3, claims=[
     {"entity": "INC-1", "attribute": "outage length", "value": "120 minutes", "evidence_id": "E3"}]))
 
 
-def run(script, **kw):
+def run(script, prefetch=False, **kw):
     llm = FakeLLM(script)
-    return Investigator(llm, retriever(), **kw).run("How long did INC-1 last and what caused it?"), llm
+    return Investigator(llm, retriever(), prefetch=prefetch, **kw).run("How long did INC-1 last and what caused it?"), llm
 
 
 def test_answered_with_verified_findings_and_contradiction():
@@ -142,3 +142,11 @@ def test_report_can_be_reverified_offline_from_saved_evidence():
     inv, _ = run([READ_BOTH, CLAIMS, report(findings=[{"text": "INC-1 lasted 220 minutes.", "citations": ["E1"]}])])
     again = verify_report(inv.question, inv.draft, inv.evidence, inv.claims)
     assert again["findings"] == inv.report["findings"] and again["contradictions"] == inv.report["contradictions"]
+
+
+
+def test_prefetch_hands_the_first_search_to_the_model():
+    inv, llm = run([report(answerable=False, unknowns=["x"])], prefetch=True)
+    opening = next(e for e in llm.log if e[0] == "start")[2]
+    assert "A first search for the question already ran" in opening and "<evidence id=\"E1\"" in opening
+    assert inv.evidence                                   # the prefetched passages are citable evidence

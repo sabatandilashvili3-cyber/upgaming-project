@@ -197,7 +197,7 @@ def main():
         for i, q in enumerate(questions, 1):
             if q["qid"] in done:
                 continue
-            inv = Investigator(llm, retriever).run(q["question"])
+            inv = Investigator(llm, retriever, prefetch=True).run(q["question"])
             r, draft = inv.report, draft_as_report(inv.draft)
             row = {"qid": q["qid"], "source": q["source"], "kind": q["kind"], "status": inv.status,
                    "error": inv.error, "cost_usd": inv.cost_usd, "latency_ms": inv.latency_ms,

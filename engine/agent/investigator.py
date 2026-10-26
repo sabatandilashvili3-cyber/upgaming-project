@@ -71,8 +71,11 @@ class Investigation:
 
 
 class Investigator:
-    def __init__(self, llm, retriever, max_steps: int = MAX_STEPS):
-        self.llm, self.retriever, self.max_steps = llm, retriever, max_steps
+    def __init__(self, llm, retriever, max_steps: int = MAX_STEPS, prefetch: bool = True):
+        """prefetch: run the obvious first search (the question itself) before the first model call
+        and hand the evidence over with the question. Measured: the model's first step was almost
+        always exactly that search, a full ~4.5 s model round trip that did no reasoning."""
+        self.llm, self.retriever, self.max_steps, self.prefetch = llm, retriever, max_steps, prefetch
 
     def run(self, question: str, on_event=None, tags=()) -> Investigation:
         emit = on_event or (lambda kind, data: None)
@@ -101,7 +104,17 @@ class Investigator:
         box = Toolbox(self.retriever)
         submitted, reminded = None, False
         try:
-            conv = self.llm.start(SYSTEM, question, TOOLS)
+            opening = question
+            if self.prefetch:
+                with obs.observation("search (prefetch)", as_type="tool", input={"query": question}) as span:
+                    content, is_error = box.run("search", {"query": question})
+                    if span is not None:
+                        span.update(output=content[:8000], level="ERROR" if is_error else "DEFAULT")
+                if not is_error:
+                    opening = (f"{question}\n\nA first search for the question already ran; its results are below. "
+                               f"Search further only for what they do not cover.\n\n{content}")
+                emit("tool", {"name": "search", "input": {"query": question}, "error": is_error})
+            conv = self.llm.start(SYSTEM, opening, TOOLS)
             for step in range(self.max_steps):
                 # a span, not a generation: the Langfuse SDK already records each Anthropic call as a
                 # generation (tokens, cost) inside it; a second generation here would double the cost
