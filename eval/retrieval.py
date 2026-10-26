@@ -7,7 +7,11 @@ Configs compared (the brief asks for at least two):
   D  structural chunks, hybrid (RRF)
   E  structural chunks, hybrid + id/time boost
   F  E + a second hop that follows ids found in the top results (engine/search/chain.py)
-  G  F + at most 2 rows of the same file in front (source diversity)
+  G  F + at most 2 rows of the same file in front (source diversity)   <- the engine's default
+  H  G + cross-encoder re-ranking of the top 30, cross-encoder order only (engine/search/rerank.py)
+  H-fused  G + cross-encoder order fused with G's order by RRF
+  H-routed H-fused only for questions with no ids and no dates; G otherwise
+  G-minilm  G with a different embedding model (all-MiniLM-L6-v2 instead of bge-small)
 
 Questions: every Meridian world question that has gold evidence, plus a seeded
 sample of HotpotQA questions. All of them search the *whole* corpus (Wikipedia
@@ -44,7 +48,14 @@ CONFIGS = {
     "E": ("structural", SearchConfig(mode="hybrid", boost=True)),
     "F": ("structural", SearchConfig(mode="hybrid", boost=True)),      # + chained second hop
     "G": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2)),   # + chained, diversified
+    "H": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=30, rerank_mode="replace")),
+    "H-fused": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=30, rerank_mode="fuse")),
+    "H-routed": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=30, rerank_mode="fuse",
+                                            rerank_when="plain")),
+    "G-minilm": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2)),
 }
+MODEL_OF = {"G-minilm": "sentence-transformers/all-MiniLM-L6-v2"}
+CHAINED = {"F", "G", "H", "H-fused", "H-routed", "G-minilm"}
 
 
 def load_questions(n_hotpot, seed=13):
@@ -71,21 +82,29 @@ def load_index(strategy, model):
 
 def evaluate(configs, n_hotpot, model=DEFAULT_MODEL, k_values=(5, 10)):
     questions = load_questions(n_hotpot)
-    embedder = Embedder(model)
-    qvecs = embedder.passages([embedder_prefix(embedder) + q["question"] for q in questions], batch_size=64)
-    retrievers, report, rows = {}, {}, []
+    embedders, qvecs, retrievers, report, rows = {}, {}, {}, {}, []
+    reranker = None
     for name in configs:
         strategy, cfg = CONFIGS[name]
-        if strategy not in retrievers:
-            chunks, vecs, aliases = load_index(strategy, model)
-            retrievers[strategy] = (Retriever(chunks, vecs, embedder), aliases)
-        retriever, aliases = retrievers[strategy]
+        m = MODEL_OF.get(name, model)
+        if m not in embedders:
+            embedders[m] = Embedder(m)
+            qvecs[m] = embedders[m].passages([embedder_prefix(embedders[m]) + q["question"] for q in questions],
+                                             batch_size=64)
+        if cfg.rerank_top and reranker is None:
+            from engine.search.rerank import Reranker
+            reranker = Reranker()
+        key = (strategy, m, bool(cfg.rerank_top))
+        if key not in retrievers:
+            chunks, vecs, aliases = load_index(strategy, m)
+            retrievers[key] = (Retriever(chunks, vecs, embedders[m], reranker if cfg.rerank_top else None), aliases)
+        retriever, aliases = retrievers[key]
         cfg.k = max(k_values) * 3                       # chunks; several chunks may share a document
         per_group = defaultdict(lambda: defaultdict(list))
         t0 = time.time()
-        for q, qv in zip(questions, qvecs):
+        for q, qv in zip(questions, qvecs[m]):
             gold = [aliases.get(g, g) for g in q["gold"]]
-            if name in ("F", "G"):
+            if name in CHAINED:
                 hits, _ = chained_search(retriever, q["question"], cfg, qvec=qv)
             else:
                 hits = retriever.search(q["question"], cfg, qvec=qv)

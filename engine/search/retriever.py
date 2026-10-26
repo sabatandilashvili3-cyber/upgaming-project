@@ -22,6 +22,9 @@ class SearchConfig:
     boost: bool = True
     collapse: bool = True           # merge near-duplicate documents into one hit
     per_file: int | None = None     # at most this many rows of one file before the rest (None = off)
+    rerank_top: int | None = None   # cross-encoder re-ranks this many hits before cutting to k (None = off)
+    rerank_mode: str = "fuse"       # fuse (RRF with the incoming order) | replace (cross-encoder order only)
+    rerank_when: str = "always"     # always | plain: only for questions with no ids and no dates (measured best)
     k: int = 10
     candidates: int = 50            # how deep each list goes before fusion
 
@@ -39,7 +42,7 @@ class Hit:
 
 
 class Retriever:
-    def __init__(self, chunks, dense, embedder):
+    def __init__(self, chunks, dense, embedder, reranker=None):
         """dense: a vectors matrix (searched in memory) or any object with .search(qvec, k),
         such as the pgvector-backed Store."""
         self.chunks = {c.chunk_id: c for c in chunks}
@@ -47,6 +50,7 @@ class Retriever:
         self.bm25 = BM25().build(ids, [c.text for c in chunks])
         self.dense = MemoryIndex(ids, dense) if isinstance(dense, np.ndarray) else dense
         self.embedder = embedder
+        self.reranker = reranker
 
     def _meta(self, cid):
         c = self.chunks.get(cid)
@@ -71,6 +75,7 @@ class Retriever:
         kw_rank = {c: r for r, c in enumerate(kw, 1)}
         dn_rank = {c: r for r, c in enumerate(dn, 1)}
         hits, by_doc = [], {}
+        want = max(cfg.k, cfg.rerank_top or 0) if self.reranker else cfg.k
         for cid, score in ranked:
             c = self.chunks.get(cid)
             if c is None:                       # deleted since this index was built
@@ -82,9 +87,14 @@ class Retriever:
             h = Hit(cid, c.doc_id, score, c.text, c.meta, kw_rank.get(cid), dn_rank.get(cid))
             hits.append(h)
             by_doc.setdefault(c.doc_id, h)
-            if len(hits) >= cfg.k:
+            if len(hits) >= want:
                 break
-        return hits
+        facts = analyse(query)
+        plain = not facts.ids and not facts.window
+        if self.reranker and cfg.rerank_top and (cfg.rerank_when == "always" or plain):
+            rr = self.reranker.rerank_fused if cfg.rerank_mode == "fuse" else self.reranker.rerank
+            hits = rr(query, hits, cfg.rerank_top)
+        return hits[:cfg.k]
 
 
 def diversify(ranked, per_file):
