@@ -677,6 +677,35 @@ engine didn't have.
    figure exists).
 3. "and which changes caused it?" → CHG-3340 and CHG-3357.
 
+## 22. Complete lists: the `list_incidents` tool — `engine/agent/tools.py`
+
+**The bug a tester found.** "Which SEV1 incidents affected payout-service, and which were external?"
+got 2 of the 6 right. It wasn't a model mistake: search returns the 8 best passages, and a "list
+every X" question needs every row. Ranking can't prove a list is complete.
+
+**The fix is a scan, not a better search.** `incident_index()` walks every incident report,
+postmortem and status page and builds one row per incident:
+- severity: `Severity: SEV1`
+- start date: `Detected:`, `Between`, `Started`
+- the services the documents name: `Services showing errors…`, `Affected services:`
+
+`list_incidents(severity, service, start, end)` filters those rows. It returns:
+- the table;
+- the line "every incident … was checked, so this list is complete";
+- the evidence passages, so every finding can still be cited and verified.
+
+**The honest edge case.** Status pages name products ("Payouts"), not services. With a
+postmortem, its service list is final. Without one, a product mention counts only as
+**POSSIBLE** and is labelled that way. INC-2026-017 is the example: the answer calls it
+borderline instead of counting or hiding it.
+
+**How it was checked:**
+- Every incident with a postmortem: the index's services equal the generator's ground truth
+  (40/40 incidents indexed, dates and severities exact).
+- A unit test with synthetic documents.
+- The tester question live: 6/6 found, the 2 external ones identified.
+- The other 10 tester questions re-run: all still pass.
+
 ## Still to do
 - the short-answer prompt (the bare span, for HotpotQA EM/F1);
 - make claim recording mandatory for cheaper models;
