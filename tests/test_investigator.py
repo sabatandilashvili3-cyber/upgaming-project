@@ -1,0 +1,121 @@
+"""The investigation loop end to end, with a scripted model (no API key, no cost)."""
+from engine.agent.investigator import Investigator
+from engine.ingest.records import Chunk
+from engine.llm.base import LLMError, ToolCall, Turn, Usage
+from engine.llm.fake import FakeLLM
+from engine.search.retriever import Retriever
+from tests.test_store import FakeEmbedder
+
+PM, ST = "postmortems/INC-1_postmortem.md", "status/2026-03-14_INC-1.html"
+CHUNKS = [
+    Chunk(PM + "::0", PM, "[Postmortem INC-1 > Impact] Duration: 220 minutes. Payments delayed: 34%.",
+          {"ids": ["INC-1"], "dates": ["2026-03-14"]}),
+    Chunk(PM + "::1", PM, "[Postmortem INC-1 > Root cause] CHG-7 (ledger): reduce pool 240 -> 60.",
+          {"ids": ["INC-1", "CHG-7"], "dates": ["2026-03-13"]}),
+    Chunk(ST + "::0", ST, "[Status INC-1] Started 2026-03-14 09:12 UTC. Resolved 11:12 UTC (120 minutes).",
+          {"ids": ["INC-1"], "dates": ["2026-03-14"]}),
+]
+
+
+def retriever():
+    emb = FakeEmbedder()
+    return Retriever(CHUNKS, emb.passages([c.text for c in CHUNKS]), emb)
+
+
+def call(name, n=1, **inp):
+    return ToolCall(f"c{n}", name, inp)
+
+
+def tools(*calls):
+    return Turn("", list(calls), "tool_use", Usage(100, 20))
+
+
+def report(answerable=True, findings=(), summary="", unknowns=()):
+    return tools(call("submit_report", 9, answerable=answerable, summary=summary, findings=list(findings),
+                      timeline=[], unknowns=list(unknowns)))
+
+
+# read_document lists a document's chunks in order, so aliases are predictable: E1, E2 (postmortem), E3 (status)
+READ_BOTH = tools(call("read_document", 1, doc_id=PM), call("read_document", 2, doc_id=ST))
+CLAIMS = tools(call("record_claims", 3, claims=[
+    {"entity": "INC-1", "attribute": "duration", "value": "220 minutes", "evidence_id": "E1"},
+    {"entity": "INC-1", "attribute": "outage length", "value": "120 minutes", "evidence_id": "E3"}]))
+
+
+def run(script, **kw):
+    llm = FakeLLM(script)
+    return Investigator(llm, retriever(), **kw).run("How long did INC-1 last and what caused it?"), llm
+
+
+def test_answered_with_verified_findings_and_contradiction():
+    inv, _ = run([READ_BOTH, CLAIMS, report(findings=[
+        {"text": "INC-1 lasted 220 minutes according to the postmortem.", "citations": ["E1"]},
+        {"text": "It was caused by CHG-7 on the ledger.", "citations": ["E2"]}],
+        summary="INC-1 lasted 220 minutes and was caused by CHG-7.")])
+    r = inv.report
+    assert inv.status == "answered" and len(r["findings"]) == 2 and not r["unsupported"]
+    assert r["findings"][1]["citations"][0]["chunk_id"] == PM + "::1"
+    (c,) = r["contradictions"]
+    assert c["attribute"] == "duration" and c["preferred"] == "220 minutes"
+    assert r["sources"] == [PM] and r["summary"].startswith("INC-1 lasted")
+    assert inv.usage.input_tokens == 300                        # three model steps counted
+
+
+def test_invented_number_and_invented_source_are_dropped():
+    inv, _ = run([READ_BOTH, report(findings=[
+        {"text": "INC-1 lasted 300 minutes.", "citations": ["E1"]},          # number not in E1
+        {"text": "CHG-7 caused INC-1.", "citations": ["E99"]},               # never shown
+        {"text": "Payments delayed: 34%.", "citations": ["E1"]}])])
+    r = inv.report
+    assert [f["text"] for f in r["findings"]] == ["Payments delayed: 34%."]
+    reasons = {u["text"]: u["reason"] for u in r["unsupported"]}
+    assert reasons["INC-1 lasted 300 minutes."] == "facts not found in the cited sources"
+    assert reasons["CHG-7 caused INC-1."] == "cites a source that was never retrieved"
+
+
+def test_summary_with_unverified_fact_is_removed():
+    inv, _ = run([READ_BOTH, report(findings=[{"text": "Payments delayed: 34%.", "citations": ["E1"]}],
+                                    summary="Delays hit 50% of payments.")])
+    assert inv.report["summary"] == "" and inv.report["unsupported"][0]["missing"] == ["50%"]
+
+
+def test_model_says_not_answerable():
+    inv, _ = run([READ_BOTH, report(answerable=False, unknowns=["Revenue loss is never recorded."])])
+    assert inv.status == "abstained" and inv.report["unknowns"] == ["Revenue loss is never recorded."]
+
+
+def test_answerable_but_nothing_verifies_is_abstention():
+    inv, _ = run([READ_BOTH, report(findings=[{"text": "It lasted 999 minutes.", "citations": ["E1"]}])])
+    assert inv.status == "abstained" and inv.report["unknowns"]
+
+
+def test_text_answer_gets_one_reminder_then_stops():
+    inv, llm = run([Turn("It lasted a while.", [], "end_turn"), Turn("Still no tool.", [], "end_turn")])
+    assert inv.status == "abstained" and inv.report["summary"] == "No report was produced."
+    assert sum(1 for e in llm.log if e[0] == "user") == 1
+
+
+def test_api_failure_becomes_an_error_report_not_a_crash():
+    inv, _ = run([READ_BOTH, LLMError("rate_limit", "Rate limited after retries", retryable=True)])
+    assert inv.status == "error" and inv.error.startswith("rate_limit")
+
+
+def test_tool_errors_are_returned_to_the_model():
+    inv, llm = run([tools(call("read_document", 1, doc_id="nope.md"), call("frobnicate", 2)),
+                    report(answerable=False, unknowns=["x"])])
+    results = next(e[1] for e in llm.log if e[0] == "results")
+    assert all(r.is_error for r in results)
+    assert "No document with id nope.md" in results[0].content and "Unknown tool" in results[1].content
+
+
+def test_step_cap_stops_a_looping_model():
+    loop = [tools(call("search", n, query="INC-1")) for n in range(20)]
+    inv, llm = run(loop, max_steps=4)
+    assert len(inv.steps) == 4 and inv.status == "abstained"
+    assert any(e[0] == "user" and "budget" in e[1] for e in llm.log)
+
+
+def test_search_wraps_evidence_and_marks_authority():
+    inv, llm = run([tools(call("search", 1, query="INC-1 duration")), report(answerable=False, unknowns=["x"])])
+    content = next(e[1] for e in llm.log if e[0] == "results")[0].content
+    assert content.count("<evidence id=") >= 2 and 'kind="postmortem" authority="4"' in content
