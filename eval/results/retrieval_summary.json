@@ -1,4 +1,598 @@
 {
+ "A": {
+  "world:multi_doc": {
+   "recall@5": 0.071,
+   "recall@10": 0.071,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.071,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.115,
+   "recall@10": 0.179,
+   "all_gold@5": 0.051,
+   "all_gold@10": 0.103,
+   "mrr": 0.099,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.748,
+   "recall@10": 0.794,
+   "all_gold@5": 0.575,
+   "all_gold@10": 0.66,
+   "mrr": 0.862,
+   "n": 539,
+   "ms_per_query": 3.1
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.008,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.0,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.333,
+   "recall@10": 0.5,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.333,
+   "mrr": 0.361,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 0.667,
+   "recall@10": 0.667,
+   "all_gold@5": 0.667,
+   "all_gold@10": 0.667,
+   "mrr": 0.209,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.0,
+   "recall@10": 0.188,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.064,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.0,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.978,
+   "recall@10": 0.984,
+   "all_gold@5": 0.956,
+   "all_gold@10": 0.967,
+   "mrr": 0.995,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.797,
+   "recall@10": 0.842,
+   "all_gold@5": 0.616,
+   "all_gold@10": 0.704,
+   "mrr": 0.922,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.757,
+   "recall@10": 0.811,
+   "all_gold@5": 0.54,
+   "all_gold@10": 0.645,
+   "mrr": 0.905,
+   "n": 409
+  }
+ },
+ "B": {
+  "world:multi_doc": {
+   "recall@5": 0.357,
+   "recall@10": 0.786,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.571,
+   "mrr": 0.237,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.186,
+   "recall@10": 0.635,
+   "all_gold@5": 0.077,
+   "all_gold@10": 0.41,
+   "mrr": 0.198,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.617,
+   "recall@10": 0.755,
+   "all_gold@5": 0.358,
+   "all_gold@10": 0.538,
+   "mrr": 0.745,
+   "n": 539,
+   "ms_per_query": 0.6
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.5,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.115,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.278,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.104,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.292,
+   "recall@10": 0.458,
+   "all_gold@5": 0.167,
+   "all_gold@10": 0.333,
+   "mrr": 0.315,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 0.333,
+   "recall@10": 1.0,
+   "all_gold@5": 0.333,
+   "all_gold@10": 1.0,
+   "mrr": 0.156,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.25,
+   "recall@10": 0.938,
+   "all_gold@5": 0.125,
+   "all_gold@10": 0.875,
+   "mrr": 0.259,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.0,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.1,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.599,
+   "recall@10": 0.802,
+   "all_gold@5": 0.407,
+   "all_gold@10": 0.67,
+   "mrr": 0.59,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.651,
+   "recall@10": 0.764,
+   "all_gold@5": 0.38,
+   "all_gold@10": 0.548,
+   "mrr": 0.787,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.663,
+   "recall@10": 0.756,
+   "all_gold@5": 0.374,
+   "all_gold@10": 0.521,
+   "mrr": 0.831,
+   "n": 409
+  }
+ },
+ "C": {
+  "world:multi_doc": {
+   "recall@5": 0.071,
+   "recall@10": 0.286,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.228,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.205,
+   "recall@10": 0.308,
+   "all_gold@5": 0.051,
+   "all_gold@10": 0.154,
+   "mrr": 0.306,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.748,
+   "recall@10": 0.825,
+   "all_gold@5": 0.562,
+   "all_gold@10": 0.694,
+   "mrr": 0.853,
+   "n": 539,
+   "ms_per_query": 3.8
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.043,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.055,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.333,
+   "recall@10": 0.583,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.5,
+   "mrr": 0.533,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 0.667,
+   "recall@10": 1.0,
+   "all_gold@5": 0.667,
+   "all_gold@10": 1.0,
+   "mrr": 0.708,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.438,
+   "recall@10": 0.438,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.536,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.043,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.907,
+   "recall@10": 0.978,
+   "all_gold@5": 0.813,
+   "all_gold@10": 0.956,
+   "mrr": 0.852,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.79,
+   "recall@10": 0.865,
+   "all_gold@5": 0.602,
+   "all_gold@10": 0.736,
+   "mrr": 0.896,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.764,
+   "recall@10": 0.84,
+   "all_gold@5": 0.555,
+   "all_gold@10": 0.687,
+   "mrr": 0.906,
+   "n": 409
+  }
+ },
+ "D": {
+  "world:multi_doc": {
+   "recall@5": 0.286,
+   "recall@10": 0.286,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.526,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.22,
+   "recall@10": 0.363,
+   "all_gold@5": 0.077,
+   "all_gold@10": 0.179,
+   "mrr": 0.291,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.765,
+   "recall@10": 0.828,
+   "all_gold@5": 0.592,
+   "all_gold@10": 0.694,
+   "mrr": 0.876,
+   "n": 539,
+   "ms_per_query": 4.0
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.0,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.056,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.093,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.125,
+   "recall@10": 0.667,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.5,
+   "mrr": 0.216,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 0.778,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.312,
+   "recall@10": 0.562,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.125,
+   "mrr": 0.375,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.333,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.5,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.973,
+   "recall@10": 0.995,
+   "all_gold@5": 0.945,
+   "all_gold@10": 0.989,
+   "mrr": 0.947,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.808,
+   "recall@10": 0.864,
+   "all_gold@5": 0.632,
+   "all_gold@10": 0.734,
+   "mrr": 0.921,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.771,
+   "recall@10": 0.835,
+   "all_gold@5": 0.562,
+   "all_gold@10": 0.677,
+   "mrr": 0.916,
+   "n": 409
+  }
+ },
+ "E": {
+  "world:multi_doc": {
+   "recall@5": 0.429,
+   "recall@10": 0.893,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.857,
+   "mrr": 0.804,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.485,
+   "recall@10": 0.726,
+   "all_gold@5": 0.231,
+   "all_gold@10": 0.513,
+   "mrr": 0.532,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.785,
+   "recall@10": 0.854,
+   "all_gold@5": 0.603,
+   "all_gold@10": 0.718,
+   "mrr": 0.893,
+   "n": 539,
+   "ms_per_query": 4.1
+  },
+  "world:simple": {
+   "recall@5": 0.25,
+   "recall@10": 0.5,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.19,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.056,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.169,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.875,
+   "recall@10": 0.875,
+   "all_gold@5": 0.667,
+   "all_gold@10": 0.667,
+   "mrr": 0.722,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 1.0,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.625,
+   "recall@10": 0.938,
+   "all_gold@5": 0.25,
+   "all_gold@10": 0.875,
+   "mrr": 0.594,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.333,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.5,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.973,
+   "recall@10": 0.995,
+   "all_gold@5": 0.945,
+   "all_gold@10": 0.989,
+   "mrr": 0.947,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.808,
+   "recall@10": 0.864,
+   "all_gold@5": 0.632,
+   "all_gold@10": 0.734,
+   "mrr": 0.921,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.771,
+   "recall@10": 0.835,
+   "all_gold@5": 0.562,
+   "all_gold@10": 0.677,
+   "mrr": 0.916,
+   "n": 409
+  }
+ },
+ "F": {
+  "world:multi_doc": {
+   "recall@5": 0.429,
+   "recall@10": 0.893,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.857,
+   "mrr": 0.804,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.489,
+   "recall@10": 0.726,
+   "all_gold@5": 0.256,
+   "all_gold@10": 0.513,
+   "mrr": 0.665,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.785,
+   "recall@10": 0.854,
+   "all_gold@5": 0.605,
+   "all_gold@10": 0.718,
+   "mrr": 0.903,
+   "n": 539,
+   "ms_per_query": 6.6
+  },
+  "world:simple": {
+   "recall@5": 0.312,
+   "recall@10": 0.562,
+   "all_gold@5": 0.125,
+   "all_gold@10": 0.125,
+   "mrr": 0.515,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.056,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.294,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.875,
+   "recall@10": 0.875,
+   "all_gold@5": 0.667,
+   "all_gold@10": 0.667,
+   "mrr": 0.708,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 1.0,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.625,
+   "recall@10": 0.875,
+   "all_gold@5": 0.25,
+   "all_gold@10": 0.75,
+   "mrr": 0.875,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.0,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.167,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.973,
+   "recall@10": 0.995,
+   "all_gold@5": 0.945,
+   "all_gold@10": 0.989,
+   "mrr": 0.947,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.808,
+   "recall@10": 0.864,
+   "all_gold@5": 0.632,
+   "all_gold@10": 0.734,
+   "mrr": 0.921,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.771,
+   "recall@10": 0.835,
+   "all_gold@5": 0.562,
+   "all_gold@10": 0.677,
+   "mrr": 0.916,
+   "n": 409
+  }
+ },
  "G": {
   "world:multi_doc": {
    "recall@5": 0.643,
@@ -23,7 +617,7 @@
    "all_gold@10": 0.722,
    "mrr": 0.895,
    "n": 539,
-   "ms_per_query": 5.9
+   "ms_per_query": 5.3
   },
   "world:simple": {
    "recall@5": 0.562,
@@ -98,6 +692,204 @@
    "n": 409
   }
  },
+ "H": {
+  "world:multi_doc": {
+   "recall@5": 0.464,
+   "recall@10": 0.5,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.821,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.308,
+   "recall@10": 0.438,
+   "all_gold@5": 0.154,
+   "all_gold@10": 0.282,
+   "mrr": 0.343,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.781,
+   "recall@10": 0.844,
+   "all_gold@5": 0.612,
+   "all_gold@10": 0.722,
+   "mrr": 0.907,
+   "n": 539,
+   "ms_per_query": 161.4
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.042,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.0,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.047,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.125,
+   "recall@10": 0.625,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.5,
+   "mrr": 0.221,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 0.261,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.625,
+   "recall@10": 0.812,
+   "all_gold@5": 0.375,
+   "all_gold@10": 0.625,
+   "mrr": 0.599,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.0,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.125,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.973,
+   "recall@10": 0.984,
+   "all_gold@5": 0.945,
+   "all_gold@10": 0.967,
+   "mrr": 0.971,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.818,
+   "recall@10": 0.876,
+   "all_gold@5": 0.648,
+   "all_gold@10": 0.756,
+   "mrr": 0.951,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.784,
+   "recall@10": 0.852,
+   "all_gold@5": 0.582,
+   "all_gold@10": 0.709,
+   "mrr": 0.946,
+   "n": 409
+  }
+ },
+ "H-fused": {
+  "world:multi_doc": {
+   "recall@5": 0.464,
+   "recall@10": 0.643,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.286,
+   "mrr": 0.814,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.425,
+   "recall@10": 0.669,
+   "all_gold@5": 0.282,
+   "all_gold@10": 0.41,
+   "mrr": 0.456,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.795,
+   "recall@10": 0.871,
+   "all_gold@5": 0.631,
+   "all_gold@10": 0.751,
+   "mrr": 0.906,
+   "n": 539,
+   "ms_per_query": 160.8
+  },
+  "world:simple": {
+   "recall@5": 0.0,
+   "recall@10": 0.438,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.109,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.0,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.148,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.667,
+   "recall@10": 0.875,
+   "all_gold@5": 0.5,
+   "all_gold@10": 0.667,
+   "mrr": 0.569,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 0.333,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.75,
+   "recall@10": 0.938,
+   "all_gold@5": 0.625,
+   "all_gold@10": 0.875,
+   "mrr": 0.708,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.333,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.25,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.978,
+   "recall@10": 0.995,
+   "all_gold@5": 0.956,
+   "all_gold@10": 0.989,
+   "mrr": 0.978,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.824,
+   "recall@10": 0.887,
+   "all_gold@5": 0.658,
+   "all_gold@10": 0.778,
+   "mrr": 0.942,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.79,
+   "recall@10": 0.863,
+   "all_gold@5": 0.592,
+   "all_gold@10": 0.731,
+   "mrr": 0.933,
+   "n": 409
+  }
+ },
  "H-routed": {
   "world:multi_doc": {
    "recall@5": 0.643,
@@ -122,7 +914,7 @@
    "all_gold@10": 0.761,
    "mrr": 0.914,
    "n": 539,
-   "ms_per_query": 151.0
+   "ms_per_query": 148.8
   },
   "world:simple": {
    "recall@5": 0.562,
@@ -221,7 +1013,7 @@
    "all_gold@10": 0.75,
    "mrr": 0.915,
    "n": 539,
-   "ms_per_query": 80.8
+   "ms_per_query": 81.1
   },
   "world:simple": {
    "recall@5": 0.562,
@@ -293,6 +1085,105 @@
    "all_gold@5": 0.592,
    "all_gold@10": 0.714,
    "mrr": 0.934,
+   "n": 409
+  }
+ },
+ "G-minilm": {
+  "world:multi_doc": {
+   "recall@5": 0.75,
+   "recall@10": 0.893,
+   "all_gold@5": 0.571,
+   "all_gold@10": 0.857,
+   "mrr": 0.54,
+   "n": 7
+  },
+  "world": {
+   "recall@5": 0.618,
+   "recall@10": 0.72,
+   "all_gold@5": 0.308,
+   "all_gold@10": 0.513,
+   "mrr": 0.528,
+   "n": 39
+  },
+  "all": {
+   "recall@5": 0.716,
+   "recall@10": 0.797,
+   "all_gold@5": 0.471,
+   "all_gold@10": 0.614,
+   "mrr": 0.83,
+   "n": 539,
+   "ms_per_query": 6.5
+  },
+  "world:simple": {
+   "recall@5": 0.5,
+   "recall@10": 0.5,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.435,
+   "n": 8
+  },
+  "world:multi_hop": {
+   "recall@5": 0.333,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.247,
+   "n": 6
+  },
+  "world:temporal": {
+   "recall@5": 0.833,
+   "recall@10": 0.833,
+   "all_gold@5": 0.667,
+   "all_gold@10": 0.667,
+   "mrr": 0.625,
+   "n": 6
+  },
+  "world:unanswerable": {
+   "recall@5": 1.0,
+   "recall@10": 1.0,
+   "all_gold@5": 1.0,
+   "all_gold@10": 1.0,
+   "mrr": 0.667,
+   "n": 3
+  },
+  "world:contradiction": {
+   "recall@5": 0.562,
+   "recall@10": 0.938,
+   "all_gold@5": 0.125,
+   "all_gold@10": 0.875,
+   "mrr": 0.698,
+   "n": 8
+  },
+  "world:injection": {
+   "recall@5": 0.333,
+   "recall@10": 0.333,
+   "all_gold@5": 0.0,
+   "all_gold@10": 0.0,
+   "mrr": 0.5,
+   "n": 1
+  },
+  "hotpot:comparison": {
+   "recall@5": 0.824,
+   "recall@10": 0.918,
+   "all_gold@5": 0.681,
+   "all_gold@10": 0.846,
+   "mrr": 0.81,
+   "n": 91
+  },
+  "hotpot": {
+   "recall@5": 0.724,
+   "recall@10": 0.803,
+   "all_gold@5": 0.484,
+   "all_gold@10": 0.622,
+   "mrr": 0.854,
+   "n": 500
+  },
+  "hotpot:bridge": {
+   "recall@5": 0.702,
+   "recall@10": 0.778,
+   "all_gold@5": 0.44,
+   "all_gold@10": 0.572,
+   "mrr": 0.863,
    "n": 409
   }
  }

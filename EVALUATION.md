@@ -185,6 +185,7 @@ now:
 | Re-upload unchanged | 1.2 s (nothing re-embedded) |
 | Delete that file | **0.2 s** (was 164.9 s: missing index on the duplicate-band table, found by this test) |
 | First search after an upload | 7.6 s (BM25 rebuilt in memory over 63k chunks) |
+| Data survives an application restart (`deploy/persistence_check.sh`) | **PASS**: 61,912 documents / 63,853 chunks before and after `systemctl restart engine`; the probe was found by search afterwards |
 
 **Full investigations are dominated by the model:** about 18 s and 8.6¢ per question with Opus.
 Prompt caching makes later steps cheap: in the March investigation, 50k of 69k input tokens were
