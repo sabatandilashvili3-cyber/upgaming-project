@@ -100,3 +100,22 @@ sudo systemctl restart engine
 sudo -u postgres psql -d engine           # database
 ls ~/backups                              # nightly dumps; restore: gunzip -c FILE | psql "$DATABASE_URL"
 ```
+
+## Troubleshooting (both happened on the first deploy)
+
+**HTTPS never comes up; Caddy logs "Timeout during connect (likely firewall problem)".**
+Ports 80/443 are closed in the network the instance actually uses. If the instance form
+created its own network (`vcn-<date>`), rules added to another VCN don't apply to it. Fix:
+1. Open the instance's subnet → its security list.
+2. Add ingress rules for TCP 80 and 443 from `0.0.0.0/0`.
+
+Caddy retries the certificate by itself; `sudo systemctl reload caddy` makes it retry at once.
+
+**From a work network the certificate looks wrong.** A corporate firewall that inspects HTTPS
+(e.g. Fortinet) re-signs every site with its own certificate. Browsers on managed machines
+trust it, but `curl` and `openssl` don't. Check the real certificate from the server itself:
+`echo | openssl s_client -connect <host>:443 -servername <host> | openssl x509 -noout -issuer`.
+It should say Let's Encrypt.
+
+**Live instance (2026-10-26):** https://130-61-72-51.sslip.io: Frankfurt, A1.Flex 4 OCPU / 24 GB,
+Ubuntu 24.04.
