@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investigation Engine</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #16181d; --muted: #5d6573; --line: #dfe3ea;
+  --accent: #2456d6; --accent-soft: #e8eefc; --ok: #1d7a46; --ok-soft: #e4f4ea;
+  --warn: #9a5b00; --warn-soft: #fdf1dc; --bad: #b42318; --bad-soft: #fde8e6; --code: #f0f2f5; --on-accent: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --panel: #191c22; --ink: #e8eaee; --muted: #9aa3b2; --line: #2b3039;
+    --accent: #7ea2ff; --accent-soft: #1f2a44; --ok: #5fd08f; --ok-soft: #173023;
+    --warn: #f0b350; --warn-soft: #33270f; --bad: #ff8a80; --bad-soft: #3a1a18; --code: #22262e; --on-accent: #0d1424;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+.top { display: flex; align-items: center; gap: 16px; padding: 14px 0 0; flex-wrap: wrap; }
+.top h1 { font-size: 17px; margin: 0; }
+.top .health { margin-left: auto; color: var(--muted); font-size: 13px; }
+nav { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; }
+nav button { border: 0; background: none; color: var(--muted); padding: 10px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+nav button[aria-selected="true"] { color: var(--ink); border-color: var(--accent); }
+main.wrap { padding: 20px 16px 60px; }
+section[hidden] { display: none; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+textarea, input[type=text], select { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+textarea { min-height: 72px; resize: vertical; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.btn { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 9px 16px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; margin: 2px 4px 2px 0; font-family: ui-monospace, monospace; }
+.example { text-align: left; background: var(--code); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.status { display: inline-block; font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 6px; }
+.status.answered { background: var(--ok-soft); color: var(--ok); }
+.status.abstained { background: var(--warn-soft); color: var(--warn); }
+.status.error { background: var(--bad-soft); color: var(--bad); }
+.steps { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); max-height: 220px; overflow: auto; background: var(--code); border-radius: 8px; padding: 10px; white-space: pre-wrap; }
+ul.findings { padding-left: 18px; margin: 0; }
+ul.findings li { margin-bottom: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.dropped li { color: var(--muted); }
+.pref { color: var(--ok); font-weight: 600; }
+.evidence { position: fixed; inset: auto 16px 16px 16px; max-width: 760px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); max-height: 45vh; overflow: auto; z-index: 5; }
+.evidence pre { white-space: pre-wrap; font: 13px/1.5 ui-monospace, monospace; background: var(--code); padding: 10px; border-radius: 8px; margin: 8px 0 0; }
+.hit { border-top: 1px solid var(--line); padding: 10px 0; }
+.hit:first-child { border-top: 0; }
+.why { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+.err { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>Investigation Engine</h1>
+      <span class="health" id="health">connecting…</span>
+    </div>
+    <nav role="tablist">
+      <button role="tab" data-tab="investigate" aria-selected="true">Investigate</button>
+      <button role="tab" data-tab="documents" aria-selected="false">Documents</button>
+      <button role="tab" data-tab="search" aria-selected="false">Search</button>
+      <button role="tab" data-tab="eval" aria-selected="false">Evaluation</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="tab-investigate">
+    <div class="card">
+      <h2>Ask a question that needs several documents</h2>
+      <textarea id="q" placeholder="Which system changes caused the payment processing delays in March 2026?"></textarea>
+      <div class="row" id="examples"></div>
+      <div class="row"><button class="btn" id="ask">Investigate</button><span class="muted small" id="askinfo"></span></div>
+    </div>
+    <div class="card" id="progress" hidden><h2>Steps</h2><div class="steps" id="steps"></div></div>
+    <div id="report"></div>
+  </section>
+
+  <section id="tab-documents" hidden>
+    <div class="card">
+      <h2>Add or update a document</h2>
+      <p class="muted small">PDF, DOCX, HTML, Markdown, CSV, JSON, JSONL or TXT, up to 10 MB. Uploading a file with the same name again updates it: unchanged rows are skipped, changed rows get a new version, removed rows are deleted.</p>
+      <div class="row">
+        <input type="file" id="file">
+        <input type="text" id="admintoken" placeholder="admin token (if this deployment requires one)" style="max-width:320px">
+        <button class="btn" id="upload">Upload</button>
+      </div>
+      <div id="uploadout" class="small"></div>
+    </div>
+    <div class="card">
+      <h2>Files</h2>
+      <div class="row" style="margin-top:0"><input type="text" id="docfilter" placeholder="filter by name"></div>
+      <div class="scroll"><table id="docs"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-search" hidden>
+    <div class="card">
+      <h2>Retrieval only (no LLM)</h2>
+      <div class="row" style="margin-top:0">
+        <input type="text" id="sq" placeholder="e.g. CHG-3340 or ledger connection pool" style="flex:1;min-width:220px">
+        <select id="smode" style="width:auto"><option value="hybrid">hybrid</option><option value="bm25">BM25 only</option><option value="dense">dense only</option></select>
+        <button class="btn" id="sgo">Search</button>
+      </div>
+      <p class="muted small">Each hit shows its rank in the keyword list and in the semantic list, so you can see why it was found.</p>
+      <div id="sout"></div>
+    </div>
+  </section>
+
+  <section id="tab-eval" hidden>
+    <div class="card"><h2>Evaluation results</h2><div id="evalout" class="scroll muted">Loading…</div></div>
+  </section>
+</main>
+
+<div class="evidence" id="evidence" hidden></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const EXAMPLES = [
+  "Which system changes caused the payment processing delays in March 2026, which services were affected, and which documents confirm it?",
+  "How long did INC-2026-016 last?",
+  "Which team owns the service changed by the change that caused INC-2026-004?",
+  "How much revenue in GEL did Meridian Pay lose during INC-2026-016?",
+];
+
+// ---------- tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== "tab-" + b.dataset.tab);
+  if (b.dataset.tab === "documents") loadDocs();
+  if (b.dataset.tab === "eval") loadEval();
+});
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
+  return r.json();
+}
+
+async function health() {
+  try {
+    const h = await api("/api/health");
+    $("#health").textContent = h.status === "ok"
+      ? `${h.documents.toLocaleString()} records · ${h.chunks.toLocaleString()} chunks · ${h.llm || "no LLM: " + (h.llm_error || "")}`
+      : "starting (loading the embedding model)…";
+    if (h.status !== "ok") setTimeout(health, 3000);
+  } catch (e) { $("#health").textContent = "offline: " + e.message; setTimeout(health, 5000); }
+}
+health();
+
+// ---------- investigate
+EXAMPLES.forEach(t => { const b = document.createElement("button"); b.className = "example"; b.textContent = t.length > 60 ? t.slice(0, 58) + "…" : t; b.title = t; b.onclick = () => { $("#q").value = t; }; $("#examples").append(b); });
+
+let evidenceIndex = {};
+$("#ask").onclick = async () => {
+  const question = $("#q").value.trim() || $("#q").placeholder;
+  $("#ask").disabled = true; $("#report").innerHTML = ""; $("#steps").textContent = ""; $("#progress").hidden = false;
+  $("#askinfo").textContent = "working…";
+  try {
+    const r = await fetch("/api/investigate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question})});
+    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail; } catch {} throw new Error(m); }
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const kind = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || "null");
+        if (kind === "step") $("#steps").textContent += `step ${data.step}: ${data.calls.map(c => c.name + " " + JSON.stringify(c.input).slice(0, 90)).join(" | ") || data.stop}\n`;
+        if (kind === "report") renderReport(data);
+      }
+    }
+  } catch (e) { $("#report").innerHTML = `<div class="card err">${esc(e.message)}</div>`; }
+  $("#ask").disabled = false; $("#askinfo").textContent = "";
+};
+
+function chips(cites) {
+  return (cites || []).map(c => { evidenceIndex[c.evidence_id] = c; return `<button class="chip" data-ev="${esc(c.evidence_id)}" title="${esc(c.doc_id)}">${esc(c.evidence_id)}</button>`; }).join("");
+}
+
+function renderReport(d) {
+  const r = d.report || {}; evidenceIndex = {};
+  let h = `<div class="card"><span class="status ${esc(d.status)}">${esc(d.status)}</span>
+    <span class="muted small"> · ${(d.latency_ms / 1000).toFixed(1)} s · $${(d.cost_usd || 0).toFixed(4)} · ${d.usage ? (d.usage.input_tokens + d.usage.cache_read_tokens) + " in / " + d.usage.output_tokens + " out tokens (" + d.usage.cache_read_tokens + " from cache)" : ""}</span>`;
+  if (d.error) h += `<p class="err">${esc(d.error)}</p>`;
+  if (r.summary) h += `<p>${esc(r.summary)}</p>`;
+  if (r.findings?.length) h += `<h3>Findings (each verified against its sources)</h3><ul class="findings">${r.findings.map(f => `<li>${esc(f.text)} ${chips(f.citations)}</li>`).join("")}</ul>`;
+  if (r.contradictions?.length) h += `<h3>Contradictions between sources</h3><div class="scroll"><table><tr><th>About</th><th>Values and sources</th><th>Verdict</th></tr>${r.contradictions.map(c => `<tr><td>${esc(c.entity)}<br><span class="muted">${esc(c.attribute)}</span></td><td>${c.values.map(v => `<div><b class="${v.value === c.preferred ? "pref" : ""}">${esc(v.value)}</b> ${v.sources.map(s => `<span class="muted small">${esc(s.kind)}</span> ${chips([{evidence_id: s.evidence_id, doc_id: s.doc_id, chunk_id: s.chunk_id}])}`).join(" ")}</div>`).join("")}</td><td class="small">${c.preferred ? `prefer <b>${esc(c.preferred)}</b>: ` : ""}${esc(c.reason)}</td></tr>`).join("")}</table></div>`;
+  if (r.timeline?.length) h += `<h3>Timeline</h3><ul class="findings">${r.timeline.map(t => `<li><b>${esc(t.time)}</b> ${esc(t.event)} ${chips(t.citations)}</li>`).join("")}</ul>`;
+  if (r.unknowns?.length) h += `<h3>Not established by the documents</h3><ul class="findings">${r.unknowns.map(u => `<li>${esc(u)}</li>`).join("")}</ul>`;
+  if (r.unsupported?.length) h += `<h3>Dropped by the verifier</h3><ul class="findings dropped">${r.unsupported.map(u => `<li>${esc(u.text)} <span class="small">(${esc(u.reason)}${u.missing?.length ? ": " + esc(u.missing.join(", ")) : ""})</span></li>`).join("")}</ul>`;
+  if (r.sources?.length) h += `<h3>Sources</h3><div class="small">${r.sources.map(esc).join("<br>")}</div>`;
+  h += `<p class="muted small">trace ${esc(d.trace_id)}</p></div>`;
+  $("#report").innerHTML = h;
+}
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-ev]"); const box = $("#evidence");
+  if (!b) { if (!e.target.closest("#evidence")) box.hidden = true; return; }
+  const c = evidenceIndex[b.dataset.ev]; if (!c) return;
+  box.hidden = false; box.innerHTML = `<b>${esc(c.evidence_id)}</b> <span class="muted small">${esc(c.chunk_id)}</span><pre>loading…</pre>`;
+  try { const d = await api("/api/document?doc_id=" + encodeURIComponent(c.doc_id)); box.querySelector("pre").textContent = d.text; }
+  catch (err) { box.querySelector("pre").textContent = err.message; }
+});
+
+// ---------- documents
+async function loadDocs() {
+  const q = $("#docfilter").value.trim();
+  try {
+    const rows = await api("/api/documents?limit=200" + (q ? "&q=" + encodeURIComponent(q) : ""));
+    $("#docs").innerHTML = `<tr><th>File</th><th>Format</th><th class="num">Records</th><th class="num">Version</th><th class="num">Duplicates</th><th></th></tr>` +
+      rows.map(r => `<tr><td>${esc(r.source)}</td><td>${esc(r.format)}</td><td class="num">${r.records}</td><td class="num">${r.version}</td><td class="num">${r.exact_duplicates + r.near_duplicates || ""}</td><td><button class="btn ghost" data-del="${esc(r.source)}">Delete</button></td></tr>`).join("");
+  } catch (e) { $("#docs").innerHTML = `<tr><td class="err">${esc(e.message)}</td></tr>`; }
+}
+let filterTimer; $("#docfilter").oninput = () => { clearTimeout(filterTimer); filterTimer = setTimeout(loadDocs, 300); };
+$("#docs").onclick = async e => {
+  const b = e.target.closest("[data-del]"); if (!b || !confirm("Delete " + b.dataset.del + " and everything derived from it?")) return;
+  try { await api("/api/documents?source=" + encodeURIComponent(b.dataset.del), {method: "DELETE", headers: {"X-Admin-Token": $("#admintoken").value}}); loadDocs(); health(); }
+  catch (err) { alert(err.message); }
+};
+$("#upload").onclick = async () => {
+  const f = $("#file").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("file", f); $("#upload").disabled = true; $("#uploadout").textContent = "uploading…";
+  try {
+    const r = await api("/api/documents", {method: "POST", body: fd, headers: {"X-Admin-Token": $("#admintoken").value}});
+    $("#uploadout").innerHTML = `<p>${esc(r.source)}: ${r.records} records · ${r.added} added · ${r.updated} updated · ${r.unchanged} unchanged · ${r.removed} removed · ${r.chunks} chunks indexed` +
+      (r.exact_duplicates.length ? `<br>exact duplicates: ${r.exact_duplicates.map(x => esc(x[0]) + " = " + esc(x[1])).join("; ")}` : "") +
+      (r.near_duplicates.length ? `<br>near duplicates: ${r.near_duplicates.map(x => esc(x[0]) + " ≈ " + esc(x[1]) + " (" + x[2] + ")").join("; ")}` : "") + "</p>";
+    loadDocs(); health();
+  } catch (e) { $("#uploadout").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+  $("#upload").disabled = false;
+};
+
+// ---------- search
+$("#sgo").onclick = async () => {
+  const query = $("#sq").value.trim(); if (!query) return;
+  try {
+    const hits = await api("/api/search", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({query, mode: $("#smode").value, k: 10})});
+    $("#sout").innerHTML = hits.map((h, i) => `<div class="hit"><b>${i + 1}.</b> ${esc(h.doc_id)} <div class="why">keyword rank ${h.bm25_rank ?? "-"} · semantic rank ${h.dense_rank ?? "-"} · score ${h.score}${h.also_in.length ? " · also in " + h.also_in.map(esc).join(", ") : ""}</div><div class="small">${esc(h.text.slice(0, 400))}</div></div>`).join("") || "<p class='muted'>No results.</p>";
+  } catch (e) { $("#sout").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+};
+$("#sq").onkeydown = e => { if (e.key === "Enter") $("#sgo").click(); };
+
+// ---------- eval
+async function loadEval() {
+  try {
+    const d = await api("/api/eval"); const out = [];
+    for (const [name, rep] of Object.entries(d.results)) {
+      const cfgs = Object.keys(rep); const groups = [...new Set(cfgs.flatMap(c => Object.keys(rep[c])))].sort((a, b) => (a !== "all") - (b !== "all") || a.localeCompare(b));
+      const metrics = [...new Set(cfgs.flatMap(c => Object.keys(rep[c].all || {})))].filter(m => !["n", "ms_per_query"].includes(m));
+      out.push(`<h3>${esc(name)}</h3><table><tr><th>Group</th><th>Config</th>${metrics.map(m => `<th class="num">${esc(m)}</th>`).join("")}<th class="num">n</th></tr>` +
+        groups.flatMap(g => cfgs.filter(c => rep[c][g]).map(c => `<tr><td>${esc(g)}</td><td>${esc(c)}</td>${metrics.map(m => `<td class="num">${rep[c][g][m] ?? ""}</td>`).join("")}<td class="num">${rep[c][g].n}</td></tr>`)).join("") + "</table>");
+    }
+    $("#evalout").innerHTML = out.join("") || "No results yet.";
+  } catch (e) { $("#evalout").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+</script>
+</body>
+</html>

@@ -5,7 +5,8 @@ A sentence passes only if:
      this investigation (the model cannot invent a source id);
   2. every "hard fact" in the sentence appears in at least one of its cited chunks.
      Hard facts are the things a hallucination usually gets wrong: identifiers
-     (CHG-3340), numbers with units (220 minutes, 34%), clock times (09:12), dates.
+     (CHG-3340), numbers with units (220 minutes, 34%), clock times (09:12), dates, and any
+     other number of two or more digits (an amount like 40,000 GEL, a count like 240).
 
 Sentences that fail are removed from the report and listed under "unsupported",
 so the reader sees what was dropped and why. This is deliberately strict and
@@ -20,6 +21,7 @@ FACT_PATTERNS = [
     r"\b\d{1,2}:\d\d\b",                                       # clock times
     r"\b\d+(?:\.\d+)?\s*%",                                    # percentages
     r"\b\d+(?:\.\d+)?\s*(?:minutes?|mins?|hours?|ms|s)\b",     # quantities with units
+    r"\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\b\d{2,}(?:\.\d+)?\b",       # any other number with 2+ digits
 ]
 FACT_RE = re.compile("|".join(FACT_PATTERNS))
 
@@ -29,7 +31,15 @@ def hard_facts(sentence: str):
 
 
 def _squash(s: str) -> str:
-    return re.sub(r"\s+", "", s.lower())
+    """Lower-case, drop spaces and thousands separators: "40,000 GEL" matches "40000 gel"."""
+    return re.sub(r"(?<=\d),(?=\d{3})", "", re.sub(r"\s+", "", s.lower()))
+
+
+def _present(fact: str, corpus: str) -> bool:
+    """Plain numbers must match whole: an invented "24" must not pass because "240" is cited."""
+    if re.fullmatch(r"[\d.]+", fact):
+        return re.search(rf"(?<![\d.]){re.escape(fact)}(?![\d.])", corpus) is not None
+    return fact in corpus
 
 
 @dataclass
@@ -47,7 +57,7 @@ def check(sentence: str, cited_ids, evidence: dict) -> Verdict:
     if unknown:
         return Verdict(False, "cites a source that was never retrieved", unknown)
     corpus = _squash(" ".join(evidence[c] for c in cited_ids))
-    missing = [f for f in hard_facts(sentence) if _squash(f) not in corpus]
+    missing = [f for f in hard_facts(sentence) if not _present(_squash(f), corpus)]
     if missing:
         return Verdict(False, "facts not found in the cited sources", missing)
     return Verdict(True)

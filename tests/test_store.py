@@ -110,3 +110,13 @@ def test_unsupported_upload_writes_nothing(ingestor, store):
     with pytest.raises(UnsupportedFormat):
         ingestor.ingest_file("malware.exe", b"MZ")
     assert store.stats()["documents"] == 0
+
+
+def test_bulk_copy_stores_metadata_as_an_object(store, ingestor):
+    from engine.store.bulk import copy_chunks
+    ingestor.ingest_file("changes.csv", CSV_V1)                     # a parent document to point at
+    with store.tx() as c:
+        copy_chunks(c, [("changes.csv#CHG-1::9", "changes.csv#CHG-1", 9, "text",
+                         {"ids": ["CHG-1"], "dates": []}, FakeEmbedder().query("text"))])
+    row = store.chunks_by_id(["changes.csv#CHG-1::9"])["changes.csv#CHG-1::9"]
+    assert isinstance(row["meta"], dict) and row["meta"]["ids"] == ["CHG-1"]

@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from psycopg.types.json import Jsonb
 
 from engine.ingest.dedup import content_hash, lsh_keys, minhash, shingles
 from engine.ingest.pipeline import iter_hotpot, iter_world
@@ -28,6 +29,20 @@ def local_url():
     d = ROOT / "data" / "pgdata"
     d.mkdir(parents=True, exist_ok=True)
     return pgserver.get_server(str(d), cleanup_mode=None).get_uri()
+
+
+def copy_chunks(conn, rows):
+    """rows: (chunk_id, doc_id, ord, text, meta dict, vector). Binary COPY: fast, typed.
+
+    meta must be wrapped in Jsonb: in binary COPY a plain str is stored as a JSON *string*
+    ("{...}" in quotes), not an object, and every later meta.get() fails. Found by
+    running the API on the bulk-loaded data; covered by tests/test_store.py.
+    """
+    with conn.cursor().copy("copy chunks (chunk_id, doc_id, ord, text, meta, embedding) from stdin "
+                            "with (format binary)") as cp:
+        cp.set_types(["text", "text", "int4", "text", "jsonb", "vector"])
+        for chunk_id, doc_id, n, text, meta, vec in rows:
+            cp.write_row((chunk_id, doc_id, n, text, Jsonb(meta), vec))
 
 
 def load(store, strategy="structural", model=DEFAULT_MODEL):
@@ -49,13 +64,13 @@ def load(store, strategy="structural", model=DEFAULT_MODEL):
                               kept if kind == "exact" else None, kept if kind == "near" else None,
                               json.dumps(r.meta, default=str)))
         print(f"documents: {len(records)} ({time.time() - t0:.0f}s)")
-        with c.cursor().copy("copy chunks (chunk_id, doc_id, ord, text, meta, embedding) from stdin "
-                             "with (format binary)") as cp:
-            cp.set_types(["text", "text", "int4", "text", "jsonb", "vector"])
-            ord_of = {}
+        ord_of = {}
+
+        def rows():
             for ch, vec in zip(chunks, vectors):
                 n = ord_of[ch["doc_id"]] = ord_of.get(ch["doc_id"], -1) + 1
-                cp.write_row((ch["chunk_id"], ch["doc_id"], n, ch["text"], json.dumps(ch["meta"], default=str), vec))
+                yield ch["chunk_id"], ch["doc_id"], n, ch["text"], ch["meta"], vec
+        copy_chunks(c, rows())
         print(f"chunks: {len(chunks)} ({time.time() - t0:.0f}s)")
         with c.cursor().copy("copy lsh_bands (band, value, doc_id) from stdin") as cp:
             for r in records:

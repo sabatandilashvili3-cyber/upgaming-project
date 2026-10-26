@@ -47,6 +47,20 @@ def test_equal_authority_conflict_has_no_preferred_value():
 def test_hard_facts():
     assert hard_facts("CHG-3340 cut the pool on 2026-03-13 at 18:40; 34% delayed for 220 minutes") == \
         ["CHG-3340", "2026-03-13", "18:40", "34%", "220 minutes"]
+    assert hard_facts("Pool cut from 240 to 60; loss about 40,000 GEL; two changes") == ["240", "60", "40,000"]
+
+
+def test_verifier_catches_an_invented_amount():
+    ev = {"c1": "Duration: 220 minutes. Payments delayed: 34%."}
+    v = check("Revenue impact was about 40,000 GEL.", ["c1"], ev)
+    assert not v.supported and v.missing == ["40,000"]
+    assert check("Loss: 40,000 GEL.", ["c2"], {"c2": "estimated loss 40000 GEL"}).supported
+
+
+def test_numbers_match_whole_not_as_substrings():
+    ev = {"c1": "reduce pool max_connections 240 -> 60"}
+    assert not check("The pool was cut to 24.", ["c1"], ev).supported
+    assert check("The pool was cut from 240 to 60.", ["c1"], ev).supported
 
 
 def test_verifier_accepts_grounded_sentence():
