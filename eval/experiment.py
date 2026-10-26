@@ -86,6 +86,7 @@ def main():
     ap.add_argument("--retrieval", choices=["G", "H-routed"], default="H-routed",
                     help="G = without the cross-encoder (the v2 model-comparison runs used G)")
     ap.add_argument("--no-prefetch", action="store_true", help="let the model run the first search itself")
+    ap.add_argument("--kinds", nargs="+", default=None, help="only these question kinds, e.g. contradiction")
     ap.add_argument("--yes", action="store_true")
     a = ap.parse_args()
 
@@ -93,6 +94,8 @@ def main():
     if lf is None:
         raise SystemExit("LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are not set")
     sets = question_sets(a.sets)
+    if a.kinds:
+        sets = {k: [q for q in v if q["kind"] in a.kinds or k == "redteam"] for k, v in sets.items()}
     n = sum(len(v[: a.limit]) for v in sets.values())
     if not a.yes and input(f"{n} questions on {a.model}/{a.effort}, about ${n * EST_COST:.0f}. Run? [y/N] ") != "y":
         return
