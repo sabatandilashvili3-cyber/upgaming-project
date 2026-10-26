@@ -42,7 +42,7 @@ if [ ! -f "$ENV_FILE" ]; then
   cat > "$ENV_FILE" <<EOF
 DATABASE_URL=postgresql://engine:$DBPASS@localhost:5432/engine
 ANTHROPIC_API_KEY=
-LLM_EFFORT=high
+LLM_EFFORT=medium
 RATE_PER_HOUR=20
 DAILY_BUDGET_USD=5
 ADMIN_TOKEN=$(openssl rand -hex 16)

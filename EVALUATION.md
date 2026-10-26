@@ -173,6 +173,27 @@ now:
 | Re-ranker latency | 0.7 s per search for questions without ids/dates on 4 ARM cores | cross-encoder on CPU | 15 candidates × 256 tokens (done, measured 1.5 s → 0.7 s); a smaller or int8 model (next) |
 | Generator answer key | 2 questions expected facts no document states | scoring against hidden truth instead of documents | ground truth = what documents state (done; documents proven unchanged) |
 
+## 6b. Latency: prefetch and effort (Opus 5.5, same questions)
+
+| Config | n | Correct | Mean | p95 | Model calls | $/question |
+|---|---|---|---|---|---|---|
+| high effort, no prefetch (before) | 30 | 0.900 | 15.5 s | 24.9 s | 3.6 | 0.065 |
+| high effort + prefetch | 30 | 0.900 | 15.0 s | 20.7 s | 2.9 | 0.067 |
+| **medium effort + prefetch (live)** | 30 | **0.900** | **12.6 s** | **18.4 s** | 2.6 | **0.057** |
+| medium + prefetch, contradiction + red-team questions | 20 | 1.000 | – | – | – | – |
+
+**Prefetch** runs the obvious first search (the question itself) before the first model call. It
+saves a model call, but the first call then reads more evidence, so the gain is mostly in the slow
+tail (p95 −17%).
+
+**Medium effort** cuts mean latency 19%, p95 26% and cost 12% with no measured loss:
+- correctness is the same;
+- contradiction detection is unchanged (0.75 on the 8 contradiction questions);
+- 12/12 red-team attacks resisted.
+
+**Repeated questions** with unchanged documents come from the answer cache: instant, $0.
+Any upload or delete changes the corpus version and invalidates every cached answer.
+
 ## 7. Load and scale (`python -m eval.loadtest`, on the 4-core ARM server)
 
 | Test | Result |

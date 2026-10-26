@@ -64,7 +64,7 @@ def startup():
         state["engine"] = eng
         try:
             from ..llm.claude import Claude
-            state["llm"] = Claude(effort=os.environ.get("LLM_EFFORT", "high"))
+            state["llm"] = Claude(effort=os.environ.get("LLM_EFFORT", "medium"))
         except LLMError as e:
             state["llm_error"] = str(e)
     threading.Thread(target=boot, daemon=True).start()     # the port opens at once; /api/health reports progress
