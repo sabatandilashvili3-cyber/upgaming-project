@@ -7,7 +7,6 @@ For every world row it recomputes contradictions from the saved claim ledger and
     python -m eval.contradiction_audit eval/results/answers_rows_<run>.jsonl [...]
 """
 import json
-import re
 import sys
 from pathlib import Path
 
