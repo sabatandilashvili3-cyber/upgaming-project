@@ -6,11 +6,13 @@ set -euo pipefail
 set -a; . /etc/engine.env; set +a
 B=http://127.0.0.1:8000
 health() { curl -s $B/api/health | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["documents"], d["chunks"])'; }
+wait_ready() { for i in $(seq 1 90); do curl -s $B/api/health | grep -q '"ok"' && return; sleep 2; done; echo "app not ready"; exit 1; }
+wait_ready                                   # e.g. right after a deploy restarted it
 printf "# Persistence probe\n\nProbe record PERSIST-7731 written before a restart.\n" > /tmp/persist_probe.md
 curl -sf -H "X-Admin-Token: $ADMIN_TOKEN" -F file=@/tmp/persist_probe.md $B/api/documents >/dev/null
 before=$(health)
 sudo systemctl restart engine
-for i in $(seq 1 90); do curl -s $B/api/health | grep -q '"ok"' && break; sleep 2; done
+sleep 2; wait_ready
 after=$(health)
 found=$(curl -s -X POST $B/api/search -H "Content-Type: application/json" -d '{"query":"PERSIST-7731","k":1}' \
         | python3 -c 'import json,sys; h=json.load(sys.stdin); print(bool(h) and h[0]["doc_id"]=="uploads/persist_probe.md")')
