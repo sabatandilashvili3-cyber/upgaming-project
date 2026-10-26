@@ -16,7 +16,10 @@ from ..search.retriever import SearchConfig
 from .claims import Claim, authority, find_contradictions
 from ..llm.base import ToolSpec
 
-SEARCH_CFG = SearchConfig(mode="hybrid", boost=True, per_file=2, k=8)
+# config H-routed: best on every overall retrieval metric (eval/retrieval.py); the cross-encoder only
+# runs when the retriever has one and the question has no ids and no dates
+SEARCH_CFG = SearchConfig(mode="hybrid", boost=True, per_file=2, k=8, rerank_top=30, rerank_mode="fuse",
+                          rerank_when="plain")
 MAX_DOC_CHUNKS = 12
 
 

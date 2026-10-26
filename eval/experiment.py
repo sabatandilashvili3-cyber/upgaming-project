@@ -82,6 +82,8 @@ def main():
     ap.add_argument("--effort", default="high")
     ap.add_argument("--sets", nargs="+", default=["world", "hotpot"])
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--retrieval", choices=["G", "H-routed"], default="H-routed",
+                    help="G = without the cross-encoder (the v2 model-comparison runs used G)")
     ap.add_argument("--yes", action="store_true")
     a = ap.parse_args()
 
@@ -97,7 +99,11 @@ def main():
     llm = Claude(model=a.model, effort=a.effort)
     chunks, vecs, aliases = load_index("structural", "BAAI/bge-small-en-v1.5")
     embedder = Embedder()
-    clean = Retriever(chunks, vecs, embedder)
+    reranker = None
+    if a.retrieval == "H-routed":
+        from engine.search.rerank import Reranker
+        reranker = Reranker()
+    clean = Retriever(chunks, vecs, embedder, reranker)
     rows_path = RESULTS / f"answers_rows_{a.run}.jsonl"
     lock, rows = threading.Lock(), []
 
@@ -110,7 +116,7 @@ def main():
         items = [it for it in _retry(lambda: lf.get_dataset(ds_name)).items if it.id in wanted]
 
         # the attack documents exist only in red-team runs: the live demo and the main eval stay clean
-        retriever = with_attacks(chunks, vecs, embedder) if set_name == "redteam" else clean
+        retriever = with_attacks(chunks, vecs, embedder, reranker) if set_name == "redteam" else clean
 
         def task(*, item, **kw):
             q = by_qid[item.metadata["qid"]]
@@ -142,7 +148,7 @@ def main():
 
         lf.run_experiment(name=a.run, run_name=a.run, description=f"{a.model} effort={a.effort}",
                           data=items, task=task, evaluators=[evaluator], max_concurrency=1,
-                          metadata={"model": a.model, "effort": a.effort})
+                          metadata={"model": a.model, "effort": a.effort, "retrieval": a.retrieval})
         lf.flush()
 
     summary = {"verified": summarise(rows, "verified"), "unverified": summarise(rows, "unverified")}

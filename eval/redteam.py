@@ -104,7 +104,7 @@ def attack_chunks():
     return chunks
 
 
-def with_attacks(chunks, vecs, embedder):
+def with_attacks(chunks, vecs, embedder, reranker=None):
     extra = attack_chunks()
     v = embedder.passages([c.text for c in extra])
-    return Retriever(list(chunks) + extra, np.vstack([vecs, v]), embedder)
+    return Retriever(list(chunks) + extra, np.vstack([vecs, v]), embedder, reranker)

@@ -58,7 +58,8 @@ def startup():
         from ..search.dense import Embedder
         from ..store.db import Store
         store = Store(os.environ["DATABASE_URL"])
-        eng = Engine(store, Embedder())
+        from ..search.rerank import Reranker
+        eng = Engine(store, Embedder(), reranker=Reranker())
         _ = eng.retriever                                   # build BM25 now, not on the first question
         state["engine"] = eng
         try:
@@ -161,7 +162,7 @@ class SearchIn(BaseModel):
 
 @app.post("/api/search")
 def search(body: SearchIn):
-    cfg = SearchConfig(mode=body.mode, boost=True, per_file=2, k=body.k)
+    cfg = SearchConfig(mode=body.mode, boost=True, per_file=2, k=body.k, rerank_top=30, rerank_when="plain")
     hits = engine().retriever.search(body.query, cfg)
     return [{"chunk_id": h.chunk_id, "doc_id": h.doc_id, "score": round(h.score, 5), "text": h.text,
              "bm25_rank": h.bm25_rank, "dense_rank": h.dense_rank, "also_in": h.also_in} for h in hits]
