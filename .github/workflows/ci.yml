@@ -19,7 +19,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          activate-environment: true      # a venv: the runner's system Python is externally managed (PEP 668)
       # CPU torch keeps the install small; the tests never load the embedding model
-      - run: uv pip install --system torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
-      - run: grep -v -E "^(torch|nvidia-|triton|cuda-)" requirements.txt > req.txt && uv pip install --system -r req.txt pytest
+      - run: uv pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+      - run: grep -v -E "^(torch|nvidia-|triton|cuda-)" requirements.txt > req.txt && uv pip install -r req.txt pytest
       - run: python -m pytest -q
