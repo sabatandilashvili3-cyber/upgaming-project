@@ -90,13 +90,17 @@ and analysis are in [EVALUATION.md](EVALUATION.md).
 
 | Model | Correct | Contradictions found | Injection resisted | $/question | s/question |
 |---|---|---|---|---|---|
-| **Opus 5.5** (default) | **0.958** (Meridian 1.000, HotpotQA 0.900) | **0.78** | **14/14** | 0.086 | 18.5 |
-| Sonnet 5.5 | 0.937 | 0.33 | 14/14 | 0.033 | 10.2 |
-| Haiku 5.5 | 0.895 | 0.22 | 13/14 | 0.0025 | 12.3 |
+| **Opus 5.5** (default) | **0.958** (Meridian 1.000, HotpotQA 0.900) | **1.00** | **14/14** | 0.086 | 18.5 |
+| Sonnet 5.5 | 0.937 | 0.78 | 14/14 | 0.033 | 10.2 |
+| Haiku 5.5 | 0.895 | 1.00 | 13/14 | 0.0025 | 12.3 |
 
 The verifier now costs no correctness (Opus 0.958 verified = 0.958 unverified draft) while still
-dropping computed or unquoted facts. Load test: about 30 ms per search for questions with ids or
-dates, 0.7 s with re-ranking.
+dropping computed or unquoted facts. Contradiction detection was 0.78 / 0.33 / 0.22 until the
+saved claim ledgers showed the models had recorded both sides and our comparison missed them
+(EVALUATION.md §4b). Load test: about 30 ms per search for questions with ids or dates, 0.5 s with
+re-ranking, 2 searches/s on 4 ARM cores.
+
+**Held-out check:** 14 questions written by hand after the build, never used for tuning (EVALUATION.md §3b).
 
 ## Run locally
 
@@ -109,7 +113,7 @@ python -m engine.store.bulk --local             # bundled Postgres + pgvector (p
 cp .env.example .env                            # add ANTHROPIC_API_KEY
 DATABASE_URL=$(python -c "from engine.store.bulk import local_url; print(local_url())") \
   uvicorn engine.api.app:app --port 8765        # open http://localhost:8765
-python -m pytest -q                             # 81 tests
+python -m pytest -q                             # 85 tests
 python -m eval.retrieval --hotpot 500           # retrieval eval, no LLM
 python -m eval.answers --hotpot 40              # answer eval, costs money, asks first
 ```
@@ -135,4 +139,9 @@ python -m eval.answers --hotpot 40              # answer eval, costs money, asks
 - **BM25 is rebuilt in memory after each upload** (a few seconds at 62k chunks). Fine for a demo;
   a write-heavy system would update the index incrementally.
 - **Contradiction detection depends on the model recording claims.** A fact it never records
-  can't be compared.
+  can't be compared, and a source it never retrieves can't disagree.
+- **`list_incidents` reads incident fields with patterns.** They accept common wordings, not only
+  this corpus's template, but a free-text postmortem with no field labels gives it nothing; in
+  production those fields would be extracted once at ingest into a table.
+- **Search throughput is CPU-bound** (2 re-ranked searches/s on 4 cores); the limit today is the
+  model budget, not the server (EVALUATION.md §7b).

@@ -143,6 +143,19 @@ details.more summary::-webkit-details-marker { display: none; }
 details.more summary .icon { width: 14px; height: 14px; transition: transform .2s ease; }
 details.more[open] summary .icon { transform: rotate(90deg); }
 details.more ul { margin-top: 8px; }
+/* report sections under the summary: one quiet row each, closed until clicked */
+.secs { margin-top: 18px; border-top: 1px solid var(--line); }
+details.sec { border-bottom: 1px solid var(--line); }
+details.sec > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  padding: 11px 2px; font-size: 13.5px; font-weight: 600; color: var(--ink); border-radius: 6px; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary:hover { background: var(--side); }
+details.sec > summary .icon { width: 14px; height: 14px; color: var(--ink-3); transition: transform .2s ease; flex: none; }
+details.sec[open] > summary .icon { transform: rotate(90deg); }
+details.sec .count { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+details.sec .count.warn { color: var(--warn); }
+.sec-body { padding: 2px 2px 14px; }
+.sec-body > ul:first-child, .sec-body > .rows:first-child { margin-top: 0; }
 .note { font-size: 12.5px; color: var(--ink-3); margin-top: 16px; }
 .src { color: var(--ink-3); font-size: 12.5px; }
 
@@ -330,7 +343,8 @@ h2.section { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 // prose with dates/times kept on one line: "2026-03-14 09:12 UTC" never breaks at its hyphens
-const prose = s => esc(s).replace(/\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?: UTC)?)?/g, m => `<span class="nw">${m}</span>`);
+// dates and ids (INC-2026-016) never break at a hyphen
+const prose = s => esc(s).replace(/\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?: UTC)?)?|\b[A-Z]{2,5}(?:-\d+)+\b/g, m => `<span class="nw">${m}</span>`);
 const icon = id => `<svg class="icon"><use href="#i-${id}"/></svg>`;
 const EXAMPLES = [
   ["What caused the March 2026 payment delays?", "Which system changes caused the payment processing delays in March 2026, which services were affected, and which documents confirm it?", "Connects incidents, postmortems and the change log"],
@@ -395,7 +409,9 @@ $("#history").onclick = async e => {
       const report = typeof t.report === "string" ? JSON.parse(t.report) : t.report;
       const steps = (typeof t.steps === "string" ? JSON.parse(t.steps) : (t.steps || [])).flatMap(s => s.calls || []);
       renderAnswer(newTurn(t.question), {status: t.error && !report?.findings?.length ? "error" : report?.status, error: t.error, report,
-                                         cost_usd: Number(t.cost_usd), latency_ms: t.latency_ms, trace_id: t.trace_id},
+                                         cost_usd: Number(t.cost_usd), latency_ms: t.latency_ms, trace_id: t.trace_id,
+                                         // a cache hit is saved as a turn with no cost and no time
+                                         cached: !t.error && Number(t.cost_usd) === 0 && !t.latency_ms},
                    steps.filter(s => s.name !== "submit_report"));
     }
     $("#thread").lastElementChild?.scrollIntoView({block: "start"});
@@ -478,27 +494,35 @@ function chips(cites) {
     return `<button class="cite${c.added_by_verifier ? " added" : ""}" data-ev="${esc(key)}" title="${esc(c.doc_id)}${c.added_by_verifier ? " · added by the verifier" : ""}">${esc(c.evidence_id)}${c.added_by_verifier ? "+" : ""}</button>`;
   }).join("");
 }
+// a closed-by-default report section: title and count visible, body on click
+function sec(title, n, body, cls = "") {
+  return `<details class="sec"><summary>${icon("chev")}<span>${title}</span><span class="count ${cls}">${n}</span></summary><div class="sec-body">${body}</div></details>`;
+}
+
 function renderAnswer(turn, d, steps = []) {
   const a = turn.querySelector(".a"), r = d.report || {};
   const meta = [];
-  if (d.cached) meta.push(`from cache · first run ${((d.original_latency_ms || 0) / 1000).toFixed(1)} s`);
+  if (d.cached) meta.push(d.original_latency_ms ? `from cache · first run ${(d.original_latency_ms / 1000).toFixed(1)} s` : "from cache");
   else if (d.latency_ms) meta.push(`<span class="num">${(d.latency_ms / 1000).toFixed(1)} s</span>`);
   if (!d.cached && d.cost_usd != null && !isNaN(d.cost_usd)) meta.push(`<span class="num">$${Number(d.cost_usd).toFixed(4)}</span>`);
   let h = `<div class="meta"><span class="pill ${esc(d.status)}">${esc(STATUS[d.status] || d.status)}</span>${meta.join(" · ")}</div>`;
   if (steps.length) h += `<details class="thinking"><summary>${icon("chev")} ${steps.length} step${steps.length > 1 ? "s" : ""}</summary><ol>${steps.map(s => `<li>${stepText(s)}</li>`).join("")}</ol></details>`;
   if (d.error) h += `<p class="err">${esc(d.error)}</p>`;
   if (r.summary) h += `<p>${prose(r.summary)}</p>`;
-  if (r.findings?.length) h += `<h3>Findings</h3><ul>${r.findings.map(f => `<li>${prose(f.text)} ${chips(f.citations)}</li>`).join("")}</ul>`;
-  if (r.contradictions?.length) h += `<h3>Where the sources disagree</h3><div class="rows">${r.contradictions.map(c => `
+  let secs = "";
+  const plusNote = JSON.stringify(r).includes('"added_by_verifier":true')
+    ? `<p class="note">An outlined citation marked + was added by the verifier: the fact is in that passage, which the model read but did not cite.</p>` : "";
+  if (r.findings?.length) secs += sec("Findings", r.findings.length, `<ul>${r.findings.map(f => `<li>${prose(f.text)} ${chips(f.citations)}</li>`).join("")}</ul>${plusNote}`);
+  if (r.contradictions?.length) secs += sec("Where the sources disagree", r.contradictions.length, `<div class="rows">${r.contradictions.map(c => `
       <div class="row"><div class="k">${esc(c.entity)}<br>${esc(String(c.attribute).replace(/_/g, " "))}</div><div>
         ${c.values.map(v => `<div>${v.value === c.preferred ? `<span class="prefer">${icon("check")}${esc(v.value)}</span>` : esc(v.value)}
           <span class="src">· ${[...new Set(v.sources.map(s => s.kind))].map(esc).join(", ")}</span> ${chips(v.sources.map(s => ({evidence_id: s.evidence_id, chunk_id: s.chunk_id, doc_id: s.doc_id})))}</div>`).join("")}
-        <div class="verdict">${c.preferred ? `Prefer ${esc(c.preferred)}: ` : ""}${esc(c.reason)}</div></div></div>`).join("")}</div>`;
-  if (r.timeline?.length) h += `<h3>Timeline</h3><div class="rows timeline">${r.timeline.map(t => `<div class="row"><div class="k num">${esc(t.time)}</div><div>${prose(t.event)} ${chips(t.citations)}</div></div>`).join("")}</div>`;
-  if (r.unknowns?.length) h += `<h3>Not established by the documents</h3><ul>${r.unknowns.map(u => `<li>${prose(u)}</li>`).join("")}</ul>`;
-  if (r.unsupported?.length) h += `<details class="more"><summary>${icon("chev")} ${r.unsupported.length} sentence${r.unsupported.length > 1 ? "s" : ""} removed by the verifier</summary><ul>${r.unsupported.map(u => `<li>${esc(u.text)} <span class="src">(${esc(u.reason)}${u.missing?.length ? ": " + esc(u.missing.join(", ")) : ""})</span></li>`).join("")}</ul></details>`;
-  if (r.sources?.length) h += `<details class="more"><summary>${icon("chev")} ${r.sources.length} source document${r.sources.length > 1 ? "s" : ""}</summary><ul>${r.sources.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details>`;
-  if (JSON.stringify(r).includes('"added_by_verifier":true')) h += `<p class="note">An outlined citation marked + was added by the verifier: the fact is in that passage, which the model read but did not cite.</p>`;
+        <div class="verdict">${c.preferred ? `Prefer ${esc(c.preferred)}: ` : ""}${esc(c.reason)}</div></div></div>`).join("")}</div>`, "warn");
+  if (r.timeline?.length) secs += sec("Timeline", r.timeline.length, `<div class="rows timeline">${r.timeline.map(t => `<div class="row"><div class="k num">${esc(t.time)}</div><div>${prose(t.event)} ${chips(t.citations)}</div></div>`).join("")}</div>`);
+  if (r.unknowns?.length) secs += sec("Not established by the documents", r.unknowns.length, `<ul>${r.unknowns.map(u => `<li>${prose(u)}</li>`).join("")}</ul>`);
+  if (r.unsupported?.length) secs += sec("Removed by the verifier", r.unsupported.length, `<ul>${r.unsupported.map(u => `<li>${esc(u.text)} <span class="src">(${esc(u.reason)}${u.missing?.length ? ": " + esc(u.missing.join(", ")) : ""})</span></li>`).join("")}</ul>`);
+  if (r.sources?.length) secs += sec("Sources", r.sources.length, `<ul>${r.sources.map(s => `<li>${esc(s)}</li>`).join("")}</ul>`);
+  if (secs) h += `<div class="secs">${secs}</div>`;
   a.innerHTML = h;
 }
 

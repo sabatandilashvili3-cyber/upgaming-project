@@ -3,38 +3,38 @@
  "search": [
   {
    "concurrency": 1,
-   "requests": 29,
+   "requests": 61,
    "errors": 0,
-   "rps": 1.4,
-   "p50_ms": 702,
-   "p95_ms": 800,
-   "p99_ms": 803,
-   "mean_ms": 703
+   "rps": 2.0,
+   "p50_ms": 510,
+   "p95_ms": 560,
+   "p99_ms": 572,
+   "mean_ms": 499
   },
   {
    "concurrency": 4,
-   "requests": 31,
+   "requests": 63,
    "errors": 0,
-   "rps": 1.4,
-   "p50_ms": 2695,
-   "p95_ms": 3190,
-   "p99_ms": 3225,
-   "mean_ms": 2718
+   "rps": 2.0,
+   "p50_ms": 1986,
+   "p95_ms": 2267,
+   "p99_ms": 2358,
+   "mean_ms": 1928
   },
   {
    "concurrency": 16,
-   "requests": 34,
+   "requests": 66,
    "errors": 0,
-   "rps": 1.4,
-   "p50_ms": 11306,
-   "p95_ms": 12132,
-   "p99_ms": 12250,
-   "mean_ms": 10664
+   "rps": 2.0,
+   "p50_ms": 8025,
+   "p95_ms": 8754,
+   "p99_ms": 9319,
+   "mean_ms": 7811
   }
  ],
  "ingest": {
   "new_2000_rows": {
-   "seconds": 52.7,
+   "seconds": 53.5,
    "added": 2000,
    "updated": 0,
    "unchanged": 0,

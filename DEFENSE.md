@@ -642,11 +642,13 @@ That's about 300 MB, then measure that retrieval quality is unchanged.
 | Injection scoring punished models for reporting attacks | reading the 11 flagged answers | behaviour checks (real tool calls from Langfuse, leaks) + an LLM judge for "adopted vs reported" |
 | A web-trained re-ranker wrecked investigation retrieval (0.776 → 0.438) | the retrieval eval split by question set | fuse its order with ours, and use it only for questions with no ids or dates (best on every metric) |
 | Search took 1.5 s; deleting a file took 165 s | the load test on the server | re-rank 15 candidates × 256 tokens (0.7 s, no quality loss); index on `lsh_bands(doc_id)` (0.2 s) |
+| Contradictions found 0.78 / 0.33 / 0.22, blamed on the models | reading the saved claim ledgers | the comparison grouped exact attribute names; keyword families → 1.00 / 0.78 / 1.00 (§23) |
+| "List every SEV1 on payout-service" found 2 of 6 | a hand-written tester question | `list_incidents` scans instead of searching (§22) |
 
 **Model choice, with numbers:**
 - Opus 0.958 at 8.6¢; Sonnet 0.937 at 3.3¢; Haiku 0.895 at 0.25¢.
-- Opus is the only model that records claims from every source, so it's the only one that
-  reliably finds contradictions (0.78 vs 0.33 / 0.22). That's why it's the default.
+- Opus is the most correct; contradiction detection is now close across models (1.00 / 0.78 /
+  1.00) once the comparison code was fixed (§23).
 
 **Why an LLM judge only for injections:** everything else has an exact answer and is checked by
 code. "Did the report adopt the claim or report it?" is a question of meaning. The judge must
@@ -705,6 +707,39 @@ borderline instead of counting or hiding it.
 - A unit test with synthetic documents.
 - The tester question live: 6/6 found, the 2 external ones identified.
 - The other 10 tester questions re-run: all still pass.
+
+**Later change:** the field patterns now accept common wordings ("Sev-1", "Impacted systems:
+Ledger and payout-service", "began at …"); a test feeds it free-form text, and on the real corpus
+it is still exact for all 40 incidents. The honest limit: a postmortem with no field labels at all
+gives a pattern nothing. In production those fields would be extracted once at ingest (an LLM
+with structured output) into an incidents table, and `list_incidents` would read the table.
+
+## 23. The review round: four fixes, each measured — `claims.py`, `rerank.py`, `eval/`
+
+**1. Contradiction detection: the models were right, our code was wrong.**
+- The story we had: "cheaper models record fewer claims".
+- What the saved ledgers showed: Haiku recorded *both* sides in 8 of 9 planted cases. It called
+  the status page's end `resolved_time` and the postmortem's `full_recovery_time`; the code only
+  grouped exact names from an alias list, so they were never compared.
+- Fix: attribute names by keyword family (first family wins), windows split into start + end,
+  values compared by type, a value with nothing comparable is left out instead of flagged, and
+  partial or product-name service lists are not contradictions.
+- Measured on the same saved outputs, $0: planted found Opus 7→9/9, Sonnet 3→7/9, Haiku 2→9/9;
+  false-looking flags 37/7/8 → 3/0/0 (the 3 are the planted injection losing on authority).
+- **Interview line:** "Before blaming the model, look at what it actually produced."
+
+**2. Throughput: profile first.** The cross-encoder is ~93% of a re-ranked search. int8
+quantisation sounded right and was *slower* on ARM (569 vs 347 ms). A 4-layer cross-encoder
+(same family) costs 0.001 recall@10 on 539 questions and is 1.5× faster: live load test 1.4 → 2.0
+searches/s, p50 702 → 510 ms.
+
+**3. Overfitting check.** The config was picked on the questions it is scored on, so
+`eval/split_check.py` picks it on a random half and scores it on the other, 1,000 times: the same
+family wins every time, with no dev/test gap. What a split can't remove is that the rules were
+designed while reading these failures, which is why there is a hand-written held-out set.
+
+**4. Held-out set.** 14 questions written by hand after the build (`eval/heldout_questions.jsonl`),
+never used for tuning, run as a Langfuse experiment (EVALUATION.md §3b).
 
 ## Still to do
 - the short-answer prompt (the bare span, for HotpotQA EM/F1);

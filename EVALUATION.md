@@ -2,8 +2,8 @@
 
 Every number here comes from a script in `eval/` and a results file in `eval/results/`.
 - **Answer-level runs are traced in Langfuse:** project "up gaming", Datasets → `meridian-v1`,
-  `hotpot-40`, `redteam-v1` → Runs.
-- **Total LLM spend for everything below: about $19.**
+  `hotpot-40`, `redteam-v1`, `heldout-v1` → Runs.
+- **Total LLM spend for everything below: about $23.**
 
 ## 1. Method
 
@@ -49,8 +49,10 @@ claims also let any later verifier change be **re-scored offline for $0**
 | H | G + cross-encoder, its order only | 0.844 | 0.722 | 0.907 | 0.876 | 0.438 |
 | H-fused | G + cross-encoder fused with G's order (RRF) | 0.871 | 0.751 | 0.906 | **0.887** | 0.669 |
 | **H-routed** | H-fused only for questions with no ids and no dates | **0.878** | **0.761** | **0.914** | 0.886 | **0.776** |
-| H-routed-15 (live) | the same, re-ranking 15 candidates instead of 30 | 0.872 | 0.750 | 0.915 | 0.880 | 0.776 |
+| H-routed-15 | the same, re-ranking 15 candidates instead of 30 | 0.872 | 0.750 | 0.915 | 0.880 | 0.776 |
 | G-minilm | G with all-MiniLM-L6-v2 instead of bge-small | 0.797 | 0.614 | 0.830 | 0.803 | 0.720 |
+| **H-routed-15-L4 (live)** | H-routed-15 with a 4-layer cross-encoder instead of 6 (1.5× faster) | 0.871 | 0.748 | 0.911 | 0.878 | 0.776 |
+| H-routed-15-L2 | the same with 2 layers (2.9× faster) | 0.862 | 0.729 | 0.902 | 0.869 | 0.776 |
 
 **What it shows:**
 1. **Embeddings alone fail on investigations** (A: 18% of Meridian evidence). Ids and dates are
@@ -67,39 +69,86 @@ claims also let any later verifier change be **re-scored offline for $0**
    - Routing by question type (re-rank only when there are no ids or dates) is **the best on every
      overall metric**.
 6. **bge-small beats all-MiniLM-L6-v2 everywhere** (HotpotQA recall@10 0.864 vs 0.803).
+7. **A smaller re-ranker is nearly free.** The 4-layer model loses 0.001 recall@10 and is 1.5×
+   faster, so it is live; 2 layers loses a full point. Meridian is unchanged by all three, because
+   routing keeps the re-ranker away from questions with ids and dates.
+
+**Was the config choice overfitted to these questions?** The default was chosen on the same 539
+questions it is scored on. `python -m eval.split_check` repeats the choice on 1,000 random 50/50
+splits: pick the best config on one half, score it on the other.
+- The same family wins every time (H-routed 908, H-routed-15 75, E/F 17).
+- On the unseen half the chosen config scores **the same as on the half it was chosen on** (mean
+  gap 0.000; p95 0.073, the noise of a 270-question half), and 0.002 below the best possible pick.
+- What a split cannot undo: the boost and per-file rules were designed while reading Meridian
+  failures. The hand-written held-out set (§3b) is the check for that.
 
 **Caveat:** Meridian groups have 6–8 questions each, so one question moves a group's number by
 0.12–0.17. The HotpotQA (n = 500) and overall (n = 539) lines are the reliable ones.
 
-## 3. Answers: the full investigator (95 questions per model, verifier v3)
+## 3. Answers: the full investigator (95 questions per model, verifier v3, contradiction comparison v2)
+
+Contradiction numbers are re-scored for $0 on the same saved model outputs after the comparison
+fix in §4b; every other column is unchanged by it.
 
 | Model | Set | n | Correct | Cite P | Cite R | Abstain OK | Contradiction | Injection resisted | HotpotQA EM / F1 | $/question | s/question (p95) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **Opus 5.5** (effort high) | Meridian | 43 | **1.000** | 0.415 | 0.986 | 1.000 | **0.778** | 1.000 | – | 0.105 | 22.5 (38.7) |
+| **Opus 5.5** (effort high) | Meridian | 43 | **1.000** | 0.415 | 0.986 | 1.000 | **1.000** | 1.000 | – | 0.105 | 22.5 (38.7) |
 | | HotpotQA | 40 | 0.900 | 0.949 | 0.987 | 0.975 | – | – | 0.625 / 0.839 | 0.047 | 10.4 (14.9) |
 | | red team | 12 | 1.000 | – | – | 1.000 | – | **12/12** | – | 0.148 | 31.0 |
-| | **all** | 95 | **0.958** | 0.698 | 0.987 | 0.989 | 0.778 | 1.000 | | **0.086** | 18.5 (37.3) |
-| **Sonnet 5.5** | Meridian | 43 | 0.977 | 0.479 | 0.965 | 1.000 | 0.333 | 1.000 | – | 0.038 | 11.7 |
+| | **all** | 95 | **0.958** | 0.698 | 0.987 | 0.989 | 1.000 | 1.000 | | **0.086** | 18.5 (37.3) |
+| **Sonnet 5.5** | Meridian | 43 | 0.977 | 0.479 | 0.965 | 1.000 | 0.778 | 1.000 | – | 0.038 | 11.7 |
 | | HotpotQA | 40 | 0.875 | 0.969 | 0.974 | 0.950 | – | – | 0.650 / 0.819 | 0.022 | 6.5 |
 | | red team | 12 | 1.000 | – | – | 1.000 | – | **12/12** | – | 0.050 | 17.2 |
-| | **all** | 95 | 0.937 | 0.737 | 0.970 | 0.979 | 0.333 | 1.000 | | **0.033** | 10.2 (22.0) |
-| **Haiku 5.5** | Meridian | 43 | 0.977 | 0.408 | 0.986 | 0.977 | 0.222 | 1.000 | – | 0.003 | 14.3 |
+| | **all** | 95 | 0.937 | 0.737 | 0.970 | 0.979 | 0.778 | 1.000 | | **0.033** | 10.2 (22.0) |
+| **Haiku 5.5** | Meridian | 43 | 0.977 | 0.408 | 0.986 | 0.977 | 1.000 | 1.000 | – | 0.003 | 14.3 |
 | | HotpotQA | 40 | 0.825 | 0.967 | 0.986 | 0.875 | – | – | 0.625 / 0.780 | 0.002 | 8.2 |
 | | red team | 12 | 0.833 | – | – | 0.917 | – | 11/12 | – | 0.004 | 18.6 |
-| | **all** | 95 | 0.895 | 0.693 | 0.986 | 0.926 | 0.222 | 0.929 | | **0.0025** | 12.3 (23.2) |
+| | **all** | 95 | 0.895 | 0.693 | 0.986 | 0.926 | 1.000 | 0.929 | | **0.0025** | 12.3 (23.2) |
 
 **Reading it:**
-- **Opus is the default.** It's the only model that reliably records claims from every source,
-  which is what contradiction detection is built on (0.78 vs 0.33 and 0.22). On the brief's own
-  question it found both causal changes, all six services and the planted duration conflict.
-- **Sonnet is the cost/quality choice.** It's 2.6× cheaper and 1.8× faster, loses 2 points of
-  correctness, and finds far fewer contradictions.
+- **Opus is the default.** It is the most correct overall, and on the brief's own question it found
+  both causal changes, all six services and the planted duration conflict.
+- **Contradiction detection no longer depends much on the model** (Opus 1.00, Sonnet 0.78, Haiku
+  1.00). It used to look like it did (0.78 / 0.33 / 0.22), but §4b shows the cause was our
+  comparison code, not the models. Sonnet's two remaining misses are retrieval: it never read the
+  second source.
+- **Sonnet is the cost/quality choice.** It's 2.6× cheaper and 1.8× faster and loses 2 points of
+  correctness.
 - **Haiku is 34× cheaper.** Its weak spots are abstaining when it shouldn't (HotpotQA 0.875) and
   one red-team case.
 - **Low Meridian citation precision (0.41–0.48) is expected.** The gold set is the *minimal*
   evidence; reports also cite supporting alerts, status pages and tickets, which count against
   precision. **Citation recall (0.97–0.99) is the number that matters:** the evidence that proves
   the answer is almost always cited.
+
+## 3b. Held-out: 14 questions written by hand after the build
+
+The Meridian set above is written by the same generator that wrote the documents, so its 1.000
+measures how well the system handles the generator's own question templates. These 14 were
+written by hand while testing the finished system, in the style of the brief's example, and
+were **never used to tune anything** (`eval/heldout_questions.jsonl`, Langfuse dataset
+`heldout-v1`). Expected answers are what the documents state.
+
+| Kind | n | What it asks for |
+|---|---|---|
+| multi-document / multi-hop | 6 | causes, affected services, owners, first suspect vs. final cause, a decoy change |
+| contradiction | 3 | duration, impact share, start time, with the more authoritative source |
+| enumeration | 4 | complete lists: every SEV1 on payout-service, every incident caused by one team's changes, every January incident without a postmortem, every April incident checked for the ledger |
+| unanswerable | 1 | an approver and a compensation figure that no document records |
+
+| Run | Correct | Cite recall | Contradictions | Abstain OK | $/question | Mean (p95) |
+|---|---|---|---|---|---|---|
+| First tester run, before `list_incidents` (11 of these questions) | 10/11 | – | – | – | 0.095 | 21.7 s |
+| **Opus 5.5, medium effort + prefetch (live config)** | **14/14** | 0.985 | 3/3 | 1.000 | 0.112 | 23.5 s (38.1 s) |
+
+**What it found:** the one miss in the first run was a complete-list question ("all SEV1s that hit
+payout-service": 2 of 6). Search returns the 8 best passages, so it cannot prove a list complete;
+`list_incidents` fixed it. The held-out questions cost more than the generated ones ($0.112 vs.
+$0.057) because enumeration questions read more evidence: "every incident caused by Money Movement's
+changes" took 48 s and $0.36.
+
+**Limit:** 14 questions is small. It is a check against fitting the templates, not a precise
+score.
 
 ## 4. The verifier: from over-strict to free
 
@@ -120,6 +169,38 @@ values rather than compute them.
 
 **Repaired citations** (the fact is in a passage the model read but did not cite) are shown in the
 UI as added by the verifier: Opus 2, Sonnet 7, Haiku 10.
+
+## 4b. Contradiction detection: the models were right, the comparison was wrong
+
+The old explanation was "cheaper models record fewer claims". Checking the saved claim ledgers
+showed otherwise: **Haiku read and recorded the disagreeing source in 8 of 9 planted cases, and
+only 2 were detected.** The model names attributes freely, and the comparison grouped by exact
+names from an alias list:
+
+| Model wrote | Meant | Old comparison |
+|---|---|---|
+| `resolved_time`, `full_recovery_time` | end_time | not grouped with `end_time` |
+| `impact_share`, `customer_estimate_failing_requests` | impact | not grouped with `impact` |
+| `window: 12:36 UTC to 15:46 UTC` | start + end | never compared |
+
+**The fix** (`engine/agent/claims.py`, tests in `tests/test_agent_logic.py`):
+- attribute names matched by keyword family, first family wins;
+- a window splits into a start and an end claim;
+- values compared by type (clock time, minutes, percent, change ids); a value with nothing to
+  compare ("since this morning") is left out instead of flagged;
+- service lists: a subset is the partial list an early report saw, and status pages (which name
+  products like "Payouts") are not compared with service lists.
+
+**Measured on the same saved runs** (`python -m eval.contradiction_audit`, $0):
+
+| | Planted found, before → after | Other contradictions flagged, before → after |
+|---|---|---|
+| Opus | 7/9 → **9/9** | 37 → 3 |
+| Sonnet | 3/9 → **7/9** | 7 → 0 |
+| Haiku | 2/9 → **9/9** | 8 → 0 |
+
+The 3 that remain are correct: a planted injection ("CHG-0001 caused it") disagrees with the
+postmortem and loses on authority. Answer correctness is unchanged (0.958 / 0.937 / 0.895).
 
 ## 5. Prompt-injection red team
 
@@ -169,8 +250,9 @@ now:
 | HotpotQA label noise | gold says Wicked Twister (Ohio, 41.5°N) is farther north than Steel Venom (Minnesota, 44.8°N) | dataset error | none needed; counted against us anyway |
 | Over-long short answers | "37,776 (Fall 2016, CSULB)" vs gold "37,776": F1 0.4 | the model qualifies its answer | prompt: short_answer = the bare span (next) |
 | Bridge question not connected | "BJ's Wholesale locations in early 2008": the 650 figure is in the US Vision paragraph, about its optical centres *inside* BJ's | the question is itself ambiguous; the model correctly refused to transfer the number | arguably correct abstention |
-| Cheaper models skip claim recording | Sonnet/Haiku contradiction detection 0.33/0.22 | they record fewer claims per source | require a claim-recording step before submit_report, or do extraction in code from structured rows (next) |
-| Re-ranker latency | 0.7 s per search for questions without ids/dates on 4 ARM cores | cross-encoder on CPU | 15 candidates × 256 tokens (done, measured 1.5 s → 0.7 s); a smaller or int8 model (next) |
+| Contradictions missed | Sonnet/Haiku contradiction detection 0.33/0.22 | not the models: exact attribute-name grouping (§4b) | keyword families, windows, typed values (done: 0.78/1.00) |
+| Complete lists | "all SEV1s that hit payout-service": 2 of 6 found | top-k search cannot prove a list is complete | `list_incidents` scans every incident document (done: 6/6, §3b) |
+| Re-ranker latency | 0.7 s per search for questions without ids/dates on 4 ARM cores | cross-encoder on CPU | 15 candidates × 256 tokens (done, 1.5 s → 0.7 s); 4-layer model (done, → 0.5 s); int8 tried and slower on ARM |
 | Generator answer key | 2 questions expected facts no document states | scoring against hidden truth instead of documents | ground truth = what documents state (done; documents proven unchanged) |
 
 ## 6b. Latency: prefetch and effort (Opus 5.5, same questions)
@@ -199,8 +281,8 @@ Any upload or delete changes the corpus version and invalidates every cached ans
 | Test | Result |
 |---|---|
 | Search, question with ids/dates (no re-ranking) | **~30 ms**: embedding 25 ms, own BM25 ~1 ms, pgvector HNSW ~2 ms over 63,852 chunks |
-| Search, plain question (with re-ranking), 1 client | p50 702 ms, p95 800 ms (was 1,547 / 2,322 before the re-ranker fix) |
-| Same, 4 / 16 clients | 1.4 requests/s; requests queue because the cross-encoder uses all 4 cores |
+| Search, plain question (with re-ranking), 1 client | p50 510 ms, p95 560 ms (702 / 800 with the 6-layer re-ranker; 1,547 / 2,322 before the first fix) |
+| Same, 4 / 16 clients | **2.0 requests/s** (was 1.4), 0 errors; p50 2.0 s / 8.0 s (was 2.7 s / 11.3 s); requests queue because the cross-encoder uses all 4 cores |
 | Upload a new 2,000-row CSV | 52.7 s (2,000 records embedded and indexed) |
 | Re-upload with 10% of rows changed | 7.2 s (only 196 rows re-embedded; was 24.7 s) |
 | Re-upload unchanged | 1.2 s (nothing re-embedded) |
@@ -212,6 +294,40 @@ Any upload or delete changes the corpus version and invalidates every cached ans
 Prompt caching makes later steps cheap: in the March investigation, 50k of 69k input tokens were
 read from cache.
 
+## 7b. Scaling: what limits it, and what would change
+
+**Where a search's time goes** (profiled on the server): the cross-encoder is ~93% of a re-ranked
+search; BM25 ~1 ms, query embedding ~25 ms, pgvector ~3 ms. Throughput is flat from 1 to 16 clients
+because the model already uses all 4 cores, so more workers would only share the same cores.
+
+**Today the limit is money, not CPU.** An investigation makes about 1–4 searches (plus a prefetch
+and second hops) and spends 12–18 s waiting for the model, so the server can start roughly 30
+investigations a minute before searches queue. The $5/day budget allows about 58 Opus
+investigations a *day*.
+
+**At 10× the traffic, in order:**
+1. The re-ranker on its own service (or a GPU), or the 2-layer model where 1 point of recall is
+   acceptable; questions with ids and dates never use it.
+2. More API workers, which share the database. Each loads its own BM25, so uploads would publish a
+   corpus version that every worker checks before searching (the store already has one).
+3. The model budget and the provider rate limit: Sonnet at 2.6× cheaper, and the answer cache.
+
+**At 10× the documents:** pgvector HNSW and BM25 both grow sub-linearly per query; the cost that
+grows linearly is the in-memory BM25 rebuild after an upload (7.6 s at 63k chunks), which would
+become an incremental index update.
+
+## 7c. What synthetic data can and cannot show
+
+Meridian Pay is generated, so its documents follow templates: clean ids, fixed field names, one
+writing style. That is what makes exact scoring of contradictions and abstention possible, and it
+is also the main threat to validity:
+- real postmortems are free text, with vague disagreements ("about two hours" vs "120 minutes")
+  and missing ids;
+- a method tuned on templates can fit the templates. The hand-written questions (§3b) found one
+  such gap (complete lists), and `list_incidents` was then tested on free-form wording too;
+- **HotpotQA is the real-text check** and is reported separately everywhere (0.900 correct with
+  Opus on real Wikipedia text).
+
 ## 8. Reproduce
 
 ```bash
@@ -219,4 +335,7 @@ python -m eval.retrieval --hotpot 500                    # retrieval table, free
 python -m eval.experiment --run my-run --sets world hotpot redteam   # needs Anthropic + Langfuse keys
 python -m eval.reverify eval/results/answers_rows_my-run.jsonl --judge   # re-score for (almost) free
 python -m eval.loadtest --base http://127.0.0.1:8000
+python -m eval.split_check                               # overfitting check of the config choice, free
+python -m eval.contradiction_audit eval/results/answers_rows_<run>.jsonl -v   # free
+python -m eval.experiment --run heldout --sets heldout --effort medium         # hand-written set
 ```

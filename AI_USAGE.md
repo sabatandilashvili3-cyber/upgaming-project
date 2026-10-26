@@ -44,14 +44,24 @@ These are visible in the git history. Each was found by running or measuring, th
 | Cross-encoder re-ranking | improved Wikipedia, broke investigation retrieval (0.776 → 0.438) | fused + routed re-ranking (best overall) |
 | No index for cascaded deletes | deleting a 2,000-row file took 165 s (load test) | index on lsh_bands(doc_id): 0.2 s |
 | Hosting plan (Hugging Face) | the docs, checked before deploying, say Docker Spaces need a paid plan and block outbound port 5432 | Oracle Cloud VM |
+| Search for "list every …" questions | my hand-written test question "all SEV1s that hit payout-service" got 2 of 6: top-k search cannot prove a list is complete | `list_incidents` tool that scans every incident document |
+| The explanation for weak contradiction detection ("cheaper models record fewer claims") | the saved claim ledgers showed Haiku recorded both sides in 8 of 9 cases; the code compared attribute names exactly | keyword families and typed values: Sonnet 0.33 → 0.78, Haiku 0.22 → 1.00, same saved outputs |
 
-## What I wrote or rewrote myself
+## What I did myself
 
-> **TO FILL IN before submitting.** Only list what was really done by hand. Planned before the
-> interview:
-> - rewrite `engine/search/bm25.py`, `engine/search/fuse.py` and `engine/ingest/chunking.py` by
->   hand from the explanations in DEFENSE.md, and run the tests;
-> - the bug-finding drills.
+- **Direction and decisions.** I asked for an approach that would not look like every other
+  submission, approved the plan, and made the product calls: Oracle hosting, medium effort instead
+  of high when answers took too long, conversation memory after I noticed follow-up questions
+  lost their context, and the ChatGPT-style white UI with the Upgaming mark.
+- **Infrastructure.** I created the Oracle Cloud VM, network, subnet and firewall rules in the
+  console, and provided the API keys and my own self-hosted Langfuse.
+- **Testing as a reviewer.** I asked for hard hand-written questions and for a review written as
+  an Upgaming engineer would write it. That found the two real gaps fixed last: complete lists and
+  contradiction comparison.
+
+> **TO FILL IN before submitting:** any code you rewrote by hand (planned: `engine/search/bm25.py`,
+> `engine/search/fuse.py`, `engine/ingest/chunking.py`, then run the tests) and the bug-finding
+> drills. Only list what you really did.
 
 ## What I learned from it
 > **TO FILL IN** in your own words: for example, why hybrid search needed the boost, and why the
