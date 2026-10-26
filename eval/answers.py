@@ -40,7 +40,7 @@ from engine.search.retriever import Retriever
 from .metrics import citation_precision, citation_recall, contains_all, exact_match, f1
 from .retrieval import CORPUS, RESULTS, load_index
 
-EST_COST_PER_QUESTION = 0.15          # USD, measured on the first runs; update from results
+EST_COST_PER_QUESTION = 0.19          # USD, measured on the live March investigation (2026-10-26)
 
 
 def load_questions(n_hotpot, seed=21):
