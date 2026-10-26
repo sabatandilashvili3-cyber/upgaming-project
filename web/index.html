@@ -143,6 +143,12 @@ details.more summary::-webkit-details-marker { display: none; }
 details.more summary .icon { width: 14px; height: 14px; transition: transform .2s ease; }
 details.more[open] summary .icon { transform: rotate(90deg); }
 details.more ul { margin-top: 8px; }
+/* evaluation: headline numbers, highlighted rows */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 4px 0 26px; }
+.stat { background: var(--side); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.stat-v { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.stat-k { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.35; }
+tr.hl td { background: var(--ok-bg); }
 /* report sections under the summary: one quiet row each, closed until clicked */
 .secs { margin-top: 18px; border-top: 1px solid var(--line); }
 details.sec { border-bottom: 1px solid var(--line); }
@@ -383,6 +389,8 @@ async function health() {
     const h = await api("/api/health");
     if (h.status !== "ok") { $("#status").innerHTML = `<span class="dot off"></span>Starting up…`; setTimeout(health, 3000); return; }
     $("#status").innerHTML = `<span class="dot${h.llm ? "" : " off"}"></span><span class="num">${h.documents.toLocaleString()}</span> records · ${h.llm ? esc(h.llm) : "no language model"}`;
+    // right after a restart the documents are ready a few seconds before the model client: look again
+    if (!h.llm && !h.llm_error) setTimeout(health, 3000);
   } catch (e) { $("#status").innerHTML = `<span class="dot off"></span>Offline`; setTimeout(health, 5000); }
 }
 // a conversation groups follow-ups: the server keeps every turn under this id and hands the
@@ -487,13 +495,32 @@ function stepText(s) {
 }
 
 const evidence = {};
+// a chip names the kind of source ("postmortem", "status page"); the exact document is in its tooltip
+const SOURCE_KIND = [["postmortems/", "postmortem"], ["changelog/", "change log"], ["incidents/", "incident report"],
+  ["status/", "status page"], ["tickets/", "ticket"], ["alerts/", "alert"], ["runbooks/", "runbook"],
+  ["architecture/", "service catalogue"], ["comms/", "customer email"]];
+const clip = (t, n) => t.length > n ? t.slice(0, n - 1) + "…" : t;
+function sourceLabel(doc = "") {
+  if (doc.startsWith("hp::")) return clip(doc.slice(4), 24);              // a Wikipedia paragraph: its title
+  const k = SOURCE_KIND.find(([p]) => doc.startsWith(p));
+  return k ? k[1] : clip(doc.split("/").pop(), 24);
+}
 function chips(cites) {
-  return (cites || []).map(c => {
+  // one chip per document: two passages of the same postmortem would read "postmortem postmortem"
+  const seen = new Set();
+  return (cites || []).filter(c => { const k = c.doc_id + (c.added_by_verifier ? "+" : ""); return !seen.has(k) && seen.add(k); }).map(c => {
     const key = c.evidence_id + "|" + c.chunk_id;
     evidence[key] = c;
-    return `<button class="cite${c.added_by_verifier ? " added" : ""}" data-ev="${esc(key)}" title="${esc(c.doc_id)}${c.added_by_verifier ? " · added by the verifier" : ""}">${esc(c.evidence_id)}${c.added_by_verifier ? "+" : ""}</button>`;
+    return `<button class="cite${c.added_by_verifier ? " added" : ""}" data-ev="${esc(key)}" title="${esc(c.doc_id)}${c.added_by_verifier ? " · added by the verifier" : ""}">${esc(sourceLabel(c.doc_id))}${c.added_by_verifier ? "+" : ""}</button>`;
   }).join("");
 }
+// "Prefer 220 minutes, because the postmortem outranks the other sources."
+function verdict(c) {
+  const reason = String(c.reason || "").replace(/[.\s]+$/, "");
+  if (!c.preferred) return esc(reason.charAt(0).toUpperCase() + reason.slice(1)) + ".";
+  return `Prefer ${esc(String(c.preferred).replace(/[.\s]+$/, ""))}, because ${esc(reason)}.`;
+}
+
 // a closed-by-default report section: title and count visible, body on click
 function sec(title, n, body, cls = "") {
   return `<details class="sec"><summary>${icon("chev")}<span>${title}</span><span class="count ${cls}">${n}</span></summary><div class="sec-body">${body}</div></details>`;
@@ -508,7 +535,8 @@ function renderAnswer(turn, d, steps = []) {
   let h = `<div class="meta"><span class="pill ${esc(d.status)}">${esc(STATUS[d.status] || d.status)}</span>${meta.join(" · ")}</div>`;
   if (steps.length) h += `<details class="thinking"><summary>${icon("chev")} ${steps.length} step${steps.length > 1 ? "s" : ""}</summary><ol>${steps.map(s => `<li>${stepText(s)}</li>`).join("")}</ol></details>`;
   if (d.error) h += `<p class="err">${esc(d.error)}</p>`;
-  if (r.summary) h += `<p>${prose(r.summary)}</p>`;
+  if (r.summary_sentences?.length) h += `<p class="summary">${r.summary_sentences.map(x => prose(x.text) + (x.citations?.length ? " " + chips(x.citations) : "")).join(" ")}</p>`;
+  else if (r.summary) h += `<p class="summary">${prose(r.summary)}</p>`;
   let secs = "";
   const plusNote = JSON.stringify(r).includes('"added_by_verifier":true')
     ? `<p class="note">An outlined citation marked + was added by the verifier: the fact is in that passage, which the model read but did not cite.</p>` : "";
@@ -516,8 +544,8 @@ function renderAnswer(turn, d, steps = []) {
   if (r.contradictions?.length) secs += sec("Where the sources disagree", r.contradictions.length, `<div class="rows">${r.contradictions.map(c => `
       <div class="row"><div class="k">${esc(c.entity)}<br>${esc(String(c.attribute).replace(/_/g, " "))}</div><div>
         ${c.values.map(v => `<div>${v.value === c.preferred ? `<span class="prefer">${icon("check")}${esc(v.value)}</span>` : esc(v.value)}
-          <span class="src">· ${[...new Set(v.sources.map(s => s.kind))].map(esc).join(", ")}</span> ${chips(v.sources.map(s => ({evidence_id: s.evidence_id, chunk_id: s.chunk_id, doc_id: s.doc_id})))}</div>`).join("")}
-        <div class="verdict">${c.preferred ? `Prefer ${esc(c.preferred)}: ` : ""}${esc(c.reason)}</div></div></div>`).join("")}</div>`, "warn");
+          ${chips(v.sources.map(s => ({evidence_id: s.evidence_id, chunk_id: s.chunk_id, doc_id: s.doc_id})))}</div>`).join("")}
+        <div class="verdict">${verdict(c)}</div></div></div>`).join("")}</div>`, "warn");
   if (r.timeline?.length) secs += sec("Timeline", r.timeline.length, `<div class="rows timeline">${r.timeline.map(t => `<div class="row"><div class="k num">${esc(t.time)}</div><div>${prose(t.event)} ${chips(t.citations)}</div></div>`).join("")}</div>`);
   if (r.unknowns?.length) secs += sec("Not established by the documents", r.unknowns.length, `<ul>${r.unknowns.map(u => `<li>${prose(u)}</li>`).join("")}</ul>`);
   if (r.unsupported?.length) secs += sec("Removed by the verifier", r.unsupported.length, `<ul>${r.unsupported.map(u => `<li>${esc(u.text)} <span class="src">(${esc(u.reason)}${u.missing?.length ? ": " + esc(u.missing.join(", ")) : ""})</span></li>`).join("")}</ul>`);
@@ -531,7 +559,8 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-ev]"); if (!b) return;
   const c = evidence[b.dataset.ev]; if (!c) return;
   document.querySelectorAll(".cite.active").forEach(x => x.classList.remove("active")); b.classList.add("active");
-  $("#panel-title").textContent = c.evidence_id + (c.added_by_verifier ? " (added by the verifier)" : "");
+  const kind = c.doc_id?.startsWith("hp::") ? c.doc_id.slice(4) : sourceLabel(c.doc_id);
+  $("#panel-title").textContent = kind.charAt(0).toUpperCase() + kind.slice(1) + (c.added_by_verifier ? " (added by the verifier)" : "");
   $("#panel-sub").textContent = c.doc_id;
   $("#panel-body").textContent = "Loading…";
   $("#panel").classList.add("open"); $("#panel").setAttribute("aria-hidden", "false");
@@ -598,34 +627,55 @@ $("#search-form").onsubmit = async e => {
 
 // ---------- evaluation ----------
 // Two curated tables; every raw number stays in EVALUATION.md and eval/results/.
-const RUN_LABEL = {"baseline-v1": "Baseline (first run)", "opus-high-v2-v3": "Opus 5.5, effort high",
-  "sonnet-v2-v3": "Sonnet 5.5", "haiku-v2-v3": "Haiku 5.5", "latency-medium-hard": "Opus 5.5, medium + prefetch (hard questions)"};
+// the answer runs shown, in order; other result files (earlier versions, latency experiments) stay in EVALUATION.md
+const RUNS = [["heldout-opus-medium", "Held-out: 14 questions written by hand, never tuned on", "Opus 5.5, live settings"],
+  ["opus-high-v2-v4", "Opus 5.5", "95 questions: company, Wikipedia, red team"],
+  ["sonnet-v2-v4", "Sonnet 5.5", "same 95 questions"], ["haiku-v2-v4", "Haiku 5.5", "same 95 questions"]];
+const MODELS = [["Opus 5.5", "opus-high-v2"], ["Sonnet 5.5", "sonnet-v2"], ["Haiku 5.5", "haiku-v2"]];
+const LIVE_CONFIG = "H-routed-15-L4";
 const RETRIEVAL_LABEL = {A: "Fixed chunks, semantic only", B: "Fixed chunks, keyword only", C: "Fixed chunks, hybrid",
   D: "Structural chunks, hybrid", E: "+ id and date boost", F: "+ second hop following ids", G: "+ max 2 rows per file",
   H: "+ re-ranker, its order only", "H-fused": "+ re-ranker, fused", "H-routed": "+ re-ranker, routed (best)",
-  "H-routed-15": "+ re-ranker, routed, 15 candidates (live)", "G-minilm": "G with all-MiniLM-L6-v2"};
+  "H-routed-15": "+ re-ranker, routed, 15 candidates", "G-minilm": "G with all-MiniLM-L6-v2",
+  "H-routed-15-L4": "4-layer re-ranker, 1.5× faster (live)", "H-routed-15-L2": "2-layer re-ranker, 2.9× faster"};
 const f3 = v => v == null || v === "" ? "–" : Number(v).toFixed(3);
 const pct = v => v == null ? "–" : Math.round(Number(v) * 100) + "%";
 async function loadEval() {
   $("#eval").innerHTML = `<p class="empty">Loading…</p>`;
   try {
     const {results} = await api("/api/eval");
+    const ans = k => results["answers_summary_" + k]?.verified?.all;
     let h = "";
+    const held = ans("heldout-opus-medium"), opus = ans("opus-high-v2-v4");
+    if (held || opus) {
+      const tile = (v, k) => `<div class="stat"><div class="stat-v num">${v}</div><div class="stat-k">${k}</div></div>`;
+      h += `<div class="stats">` +
+        (held ? tile(`${Math.round(held.answer_correct * held.n)}/${held.n}`, "hand-written held-out questions correct") : "") +
+        (opus ? tile(pct(opus.answer_correct), "correct on 95 questions (Opus 5.5)") : "") +
+        (opus ? tile(pct(opus.contradiction), "planted contradictions found") : "") +
+        (opus ? tile("$" + Number(opus.cost_usd).toFixed(3), "per question") : "") + `</div>`;
+    }
+    const runs = RUNS.map(([k, label, sub]) => [label, sub, ans(k), k === "heldout-opus-medium"]).filter(([, , a]) => a);
+    if (runs.length) {
+      h += `<h2 class="section">Answer quality</h2><p class="page-sub" style="margin-bottom:10px">The full investigator, scored after verification. Every question searches the whole corpus.</p>
+        <div class="tablewrap"><table><tr><th>Run</th><th class="r">Correct</th><th class="r">Proof cited</th><th class="r">Abstained correctly</th><th class="r">Contradictions found</th><th class="r">Attacks resisted</th><th class="r">Per question</th><th class="r">n</th></tr>` +
+        runs.map(([label, sub, a, hl]) => `<tr${hl ? ' class="hl"' : ""}><td>${esc(label)}<br><span class="src">${esc(sub)}</span></td><td class="r num">${pct(a.answer_correct)}</td><td class="r num">${pct(a.cite_recall)}</td>
+          <td class="r num">${pct(a.abstain_ok)}</td><td class="r num">${pct(a.contradiction)}</td><td class="r num">${pct(a.injection_ok)}</td>
+          <td class="r num nw">${a.cost_usd != null ? "$" + Number(a.cost_usd).toFixed(3) : "–"} · ${a.latency_s != null ? Number(a.latency_s).toFixed(1) + " s" : "–"}</td><td class="r num">${a.n}</td></tr>`).join("") + `</table></div>`;
+    }
+    const fix = MODELS.map(([m, k]) => [m, ans(k + "-v3")?.contradiction, ans(k + "-v4")?.contradiction]).filter(([, a, b]) => a != null && b != null);
+    if (fix.length) {
+      h += `<h2 class="section">Contradiction detection: the fix</h2><p class="page-sub" style="margin-bottom:10px">The models had recorded both sides; the comparison only grouped exact attribute names ("resolved_time" was never compared with "end_time"). Re-scored on the same saved answers, at no cost.</p>
+        <div class="tablewrap"><table><tr><th>Model</th><th class="r">Before</th><th class="r">After</th></tr>` +
+        fix.map(([m, a, b]) => `<tr><td>${esc(m)}</td><td class="r num">${pct(a)}</td><td class="r num"><b style="font-weight:600">${pct(b)}</b></td></tr>`).join("") + `</table></div>`;
+    }
     const ret = results.retrieval_summary;
     if (ret) {
-      h += `<h2 class="section">Search quality</h2><p class="page-sub" style="margin-bottom:10px">539 questions over the whole corpus; no language model.</p>
+      h += `<h2 class="section">Search quality</h2><p class="page-sub" style="margin-bottom:10px">539 questions over the whole corpus; no language model. Each row adds one step to the one above it.</p>
         <div class="tablewrap"><table><tr><th>Configuration</th><th class="r">Recall@10</th><th class="r">All gold in top 10</th><th class="r">MRR</th><th class="r">Wikipedia recall@10</th><th class="r">Company recall@10</th></tr>` +
-        Object.keys(ret).map(c => `<tr><td><b style="font-weight:500">${esc(c)}</b> <span class="src">${esc(RETRIEVAL_LABEL[c] || "")}</span></td>
+        Object.keys(ret).map(c => `<tr${c === LIVE_CONFIG ? ' class="hl"' : ""}><td><b style="font-weight:500">${esc(c)}</b> <span class="src">${esc(RETRIEVAL_LABEL[c] || "")}</span></td>
           <td class="r num">${f3(ret[c].all?.["recall@10"])}</td><td class="r num">${f3(ret[c].all?.["all_gold@10"])}</td><td class="r num">${f3(ret[c].all?.mrr)}</td>
           <td class="r num">${f3(ret[c].hotpot?.["recall@10"])}</td><td class="r num">${f3(ret[c].world?.["recall@10"])}</td></tr>`).join("") + `</table></div>`;
-    }
-    const runs = Object.entries(results).filter(([k]) => k.startsWith("answers_summary_")).map(([k, v]) => [k.replace("answers_summary_", ""), v.verified?.all]).filter(([, a]) => a);
-    if (runs.length) {
-      h += `<h2 class="section">Answer quality</h2><p class="page-sub" style="margin-bottom:10px">The full investigator, scored after verification.</p>
-        <div class="tablewrap"><table><tr><th>Run</th><th class="r">Correct</th><th class="r">Proof cited</th><th class="r">Abstained correctly</th><th class="r">Contradictions found</th><th class="r">Attacks resisted</th><th class="r">Per question</th><th class="r">n</th></tr>` +
-        runs.map(([k, a]) => `<tr><td>${esc(RUN_LABEL[k] || k)}</td><td class="r num">${pct(a.answer_correct)}</td><td class="r num">${pct(a.cite_recall)}</td>
-          <td class="r num">${pct(a.abstain_ok)}</td><td class="r num">${pct(a.contradiction)}</td><td class="r num">${pct(a.injection_ok)}</td>
-          <td class="r num">${a.cost_usd != null ? "$" + Number(a.cost_usd).toFixed(3) : "–"} · ${a.latency_s != null ? Number(a.latency_s).toFixed(1) + " s" : "–"}</td><td class="r num">${a.n}</td></tr>`).join("") + `</table></div>`;
     }
     $("#eval").innerHTML = h || `<p class="empty">No evaluation results yet.</p>`;
   } catch (e) { $("#eval").innerHTML = `<p class="err">${esc(e.message)}</p>`; }

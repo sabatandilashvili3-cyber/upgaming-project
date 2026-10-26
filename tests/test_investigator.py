@@ -51,13 +51,15 @@ def test_answered_with_verified_findings_and_contradiction():
     inv, _ = run([READ_BOTH, CLAIMS, report(findings=[
         {"text": "INC-1 lasted 220 minutes according to the postmortem.", "citations": ["E1"]},
         {"text": "It was caused by CHG-7 on the ledger.", "citations": ["E2"]}],
-        summary="INC-1 lasted 220 minutes and was caused by CHG-7.")])
+        summary="INC-1 lasted 220 minutes; the status page said 120 minutes.")])
     r = inv.report
     assert inv.status == "answered" and len(r["findings"]) == 2 and not r["unsupported"]
     assert r["findings"][1]["citations"][0]["chunk_id"] == PM + "::1"
     (c,) = r["contradictions"]
     assert c["attribute"] == "duration" and c["preferred"] == "220 minutes"
     assert r["sources"] == [PM] and r["summary"].startswith("INC-1 lasted")
+    # the summary sentence carries the minimal passages for its facts: 220 (postmortem E1), 120 (status E3)
+    assert {c["evidence_id"] for c in r["summary_sentences"][0]["citations"]} == {"E1", "E3"}
     assert inv.usage.input_tokens == 300                        # three model steps counted
 
 

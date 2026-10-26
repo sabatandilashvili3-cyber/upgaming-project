@@ -274,17 +274,20 @@ def verify_report(question, submitted, book: dict, claims: list) -> dict:
     used = sorted({c["evidence_id"] for x in findings + timeline for c in x["citations"]}
                   | {s["evidence_id"] for c in contradictions for v in c["values"] for s in v["sources"]
                      if s["evidence_id"]})
-    kept_sentences = []
+    kept_sentences = []           # [{text, citations}]: each kept sentence with the few passages behind it
     for sent in split_sentences(submitted.get("summary", "")):
         if not hard_facts(sent):
-            kept_sentences.append(sent)
+            kept_sentences.append({"text": sent, "citations": []})
             continue
         cites, fail = verified(sent, used) if used else (None, {"text": sent, "reason": "no citation", "missing": []})
         if cites:
-            kept_sentences.append(sent)
+            # show the smallest set of those passages that holds the sentence's facts, not all of them
+            pool = {c["evidence_id"]: evidence[c["evidence_id"]] for c in cites}
+            facts = [f for f in hard_facts(sent) if f not in question]
+            kept_sentences.append({"text": sent, "citations": cite(find_supports(facts, pool, max_extra=6))})
         else:
             unsupported.append({**fail, "reason": "summary: " + fail["reason"]})
-    summary = " ".join(kept_sentences)
+    summary = " ".join(x["text"] for x in kept_sentences)
 
     answered = submitted.get("answerable", False) and bool(findings)
     unknowns = list(submitted.get("unknowns", []))
@@ -292,6 +295,7 @@ def verify_report(question, submitted, book: dict, claims: list) -> dict:
         unknowns = ["No finding survived verification against the cited sources."]
     sources = sorted({c["doc_id"] for x in findings + timeline for c in x["citations"]})
     return {**base, "status": "answered" if answered else "abstained", "summary": summary,
+            "summary_sentences": kept_sentences,
             "short_answer": submitted.get("short_answer", "") if answered else "",
             "findings": findings, "timeline": timeline, "unsupported": unsupported,
             "unknowns": unknowns, "sources": sources}
