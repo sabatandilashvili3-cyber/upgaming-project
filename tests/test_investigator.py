@@ -150,3 +150,24 @@ def test_prefetch_hands_the_first_search_to_the_model():
     opening = next(e for e in llm.log if e[0] == "start")[2]
     assert "A first search for the question already ran" in opening and "<evidence id=\"E1\"" in opening
     assert inv.evidence                                   # the prefetched passages are citable evidence
+
+
+# ---------------------------------------------------------------- conversations (follow-up questions)
+def test_follow_up_sees_earlier_turns_and_prefetch_follows_their_ids():
+    from engine.agent.investigator import prefetch_query
+    history = [("How long did INC-2026-016 last?", "INC-1 lasted 220 minutes according to the postmortem.")]
+    assert prefetch_query("how much revenue did it generate", history) == "how much revenue did it generate INC-2026-016"
+    assert prefetch_query("What about INC-2026-009?", history) == "What about INC-2026-009?"   # own id: untouched
+    assert prefetch_query("anything", []) == "anything"
+    llm = FakeLLM([report(answerable=False, unknowns=["x"])])
+    Investigator(llm, retriever(), prefetch=True).run("how much revenue did it generate", history=history)
+    opening = next(e for e in llm.log if e[0] == "start")[2]
+    assert "Earlier in this conversation" in opening and "INC-1 lasted 220 minutes" in opening
+    assert "it is NOT evidence" in opening and "New question: how much revenue did it generate" in opening
+
+
+def test_cache_key_depends_on_the_conversation():
+    from engine.agent.investigator import cache_key
+    a = cache_key("how long did it last?", "m", "medium", "v1", [("about INC-1", "x")])
+    b = cache_key("how long did it last?", "m", "medium", "v1", [("about INC-2", "y")])
+    assert a != b and a == cache_key("How long did it   last?", "m", "medium", "v1", [("about INC-1", "x")])

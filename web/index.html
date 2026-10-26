@@ -371,27 +371,34 @@ async function health() {
     $("#status").innerHTML = `<span class="dot${h.llm ? "" : " off"}"></span><span class="num">${h.documents.toLocaleString()}</span> records · ${h.llm ? esc(h.llm) : "no language model"}`;
   } catch (e) { $("#status").innerHTML = `<span class="dot off"></span>Offline`; setTimeout(health, 5000); }
 }
-async function loadHistory(activeId) {
+// a conversation groups follow-ups: the server keeps every turn under this id and hands the
+// earlier questions and verified answers to the next investigation
+let conversationId = null;
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)).replace(/[^A-Za-z0-9_-]/g, "");
+async function loadHistory() {
   try {
-    const rows = await api("/api/traces?limit=40");
+    const rows = await api("/api/conversations?limit=40");
     if (!rows.length) return;
-    $("#history").innerHTML = rows.map(t => `<button class="nav-btn" data-trace="${esc(t.trace_id)}" title="${esc(t.question)}"${t.trace_id === activeId ? ' aria-current="page"' : ""}><span>${esc(t.question)}</span></button>`).join("");
+    $("#history").innerHTML = rows.map(c => `<button class="nav-btn" data-conv="${esc(c.conversation_id)}" title="${esc(c.title)}"${c.conversation_id === conversationId ? ' aria-current="page"' : ""}><span>${esc(c.title)}</span></button>`).join("");
   } catch {}
 }
 $("#history").onclick = async e => {
-  const b = e.target.closest("[data-trace]"); if (!b) return;
-  show("chat");
+  const b = e.target.closest("[data-conv]"); if (!b) return;
+  show("chat"); closePanel();
   document.querySelectorAll("#history .nav-btn").forEach(x => x.removeAttribute("aria-current"));
   b.setAttribute("aria-current", "page");
   try {
-    const t = await api("/api/traces/" + encodeURIComponent(b.dataset.trace));
-    const report = typeof t.report === "string" ? JSON.parse(t.report) : t.report;
-    const steps = (typeof t.steps === "string" ? JSON.parse(t.steps) : (t.steps || [])).flatMap(s => s.calls || []);
+    const turns = await api("/api/conversations/" + encodeURIComponent(b.dataset.conv));
+    conversationId = b.dataset.conv;                      // a new question continues this conversation
     $("#thread").innerHTML = ""; $("#thread").style.height = "";
-    const turn = newTurn(t.question);
-    renderAnswer(turn, {status: t.error && !report?.findings?.length ? "error" : report?.status, error: t.error, report,
-                        cost_usd: Number(t.cost_usd), latency_ms: t.latency_ms, trace_id: t.trace_id},
-                 steps.filter(s => s.name !== "submit_report"));
+    for (const t of turns) {
+      const report = typeof t.report === "string" ? JSON.parse(t.report) : t.report;
+      const steps = (typeof t.steps === "string" ? JSON.parse(t.steps) : (t.steps || [])).flatMap(s => s.calls || []);
+      renderAnswer(newTurn(t.question), {status: t.error && !report?.findings?.length ? "error" : report?.status, error: t.error, report,
+                                         cost_usd: Number(t.cost_usd), latency_ms: t.latency_ms, trace_id: t.trace_id},
+                   steps.filter(s => s.name !== "submit_report"));
+    }
+    $("#thread").lastElementChild?.scrollIntoView({block: "start"});
   } catch (err) { $("#thread").innerHTML = `<p class="err">${esc(err.message)}</p>`; }
 };
 
@@ -406,6 +413,7 @@ $("#thread").addEventListener("click", e => {
   const ex = e.target.closest("[data-q]"); if (ex) { $("#q").value = ex.dataset.q; grow(); ask(); }
 });
 function newChat() {
+  conversationId = null;
   show("chat"); hero(); $("#q").value = ""; grow(); $("#q").focus(); closePanel();
   document.querySelectorAll("#history .nav-btn").forEach(x => x.removeAttribute("aria-current"));
 }
@@ -429,13 +437,14 @@ function newTurn(question) {
 async function ask() {
   const question = ta.value.trim(); if (!question || busy) return;
   busy = true; ta.value = ""; grow();
+  if (!conversationId) conversationId = newId();
   const turn = newTurn(question);
   const a = turn.querySelector(".a");
   a.innerHTML = `<details class="thinking" open><summary><span class="pulse"></span> Investigating</summary><ol></ol></details>`;
   turn.scrollIntoView({block: "start", behavior: "smooth"});
   const steps = [];
   try {
-    const r = await fetch("/api/investigate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question})});
+    const r = await fetch("/api/investigate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question, conversation_id: conversationId})});
     if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail; } catch {} throw new Error(m); }
     const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
     for (;;) {
@@ -446,7 +455,7 @@ async function ask() {
         const kind = (block.match(/^event: (.*)$/m) || [])[1];
         const data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || "null");
         if (kind === "tool") { steps.push(data); a.querySelector("ol")?.insertAdjacentHTML("beforeend", `<li>${stepText(data)}</li>`); }
-        if (kind === "report") { renderAnswer(turn, data, steps); loadHistory(data.trace_id); }
+        if (kind === "report") { renderAnswer(turn, data, steps); loadHistory(); }
       }
     }
   } catch (e) { a.innerHTML = `<p class="err">${esc(e.message)}</p>`; }

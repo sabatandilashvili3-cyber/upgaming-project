@@ -170,6 +170,7 @@ def search(body: SearchIn):
 
 class AskIn(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
+    conversation_id: str | None = Field(None, max_length=64, pattern="^[A-Za-z0-9_-]+$")
 
 
 @app.post("/api/investigate")
@@ -182,10 +183,26 @@ def investigate(body: AskIn, request: Request):
         raise HTTPException(429, f"Today's LLM budget (${DAILY_BUDGET_USD}) is used up; try tomorrow.")
 
     llm = state["llm"]
-    key = cache_key(body.question, llm.model, llm.effort, eng.store.corpus_version())
+    # the server rebuilds the conversation from its own records; the client only sends the id
+    history = []
+    if body.conversation_id:
+        for t in eng.store.conversation(body.conversation_id):
+            rep_ = t["report"] if isinstance(t["report"], dict) else json.loads(t["report"] or "null") or {}
+            answer = rep_.get("summary") or rep_.get("short_answer") or " ".join(
+                f["text"] for f in rep_.get("findings", [])[:3])
+            history.append((t["question"], answer))
+    history = history[-3:]
+    key = cache_key(body.question, llm.model, llm.effort, eng.store.corpus_version(), history)
     cached = eng.store.cache_get(key)
     if cached:
-        # identical question, same documents: answer instantly and for free
+        # identical question, same documents: answer instantly and for free. It is still recorded as a
+        # turn of this conversation, or a follow-up after a cached answer would lose its context.
+        import uuid
+        eng.store.save_trace({"trace_id": uuid.uuid4().hex[:12], "question": body.question,
+                              "report": cached.get("report"), "steps": [], "model": llm.model, "tokens_in": 0,
+                              "tokens_out": 0, "cost_usd": 0.0, "latency_ms": 0, "error": None,
+                              "conversation_id": body.conversation_id})
+
         def replay():
             yield f"event: report\ndata: {json.dumps({**cached, 'cached': True, 'cost_usd': 0.0, 'latency_ms': 0})}\n\n"
         return StreamingResponse(replay(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
@@ -193,14 +210,15 @@ def investigate(body: AskIn, request: Request):
     events: queue.Queue = queue.Queue()
 
     def work():
-        inv = Investigator(state["llm"], eng.retriever).run(body.question, tags=["web"],
+        inv = Investigator(state["llm"], eng.retriever).run(body.question, tags=["web"], history=history,
                                                             on_event=lambda k, d: events.put((k, d)))
         eng.store.save_trace({"trace_id": inv.trace_id, "question": inv.question, "report": inv.report,
                               "steps": inv.steps, "model": state["llm"].model,
                               "tokens_in": inv.usage.input_tokens + inv.usage.cache_read_tokens
                                            + inv.usage.cache_write_tokens,
                               "tokens_out": inv.usage.output_tokens, "cost_usd": inv.cost_usd,
-                              "latency_ms": inv.latency_ms, "error": inv.error})
+                              "latency_ms": inv.latency_ms, "error": inv.error,
+                              "conversation_id": body.conversation_id})
         payload = {"trace_id": inv.trace_id, "langfuse_trace_id": inv.lf_trace_id,
                    "status": inv.status, "error": inv.error,
                    "report": inv.report, "cost_usd": inv.cost_usd, "latency_ms": inv.latency_ms,
@@ -225,6 +243,19 @@ def investigate(body: AskIn, request: Request):
 @app.get("/api/traces")
 def traces(limit: int = 30):
     return jsonable(engine().store.recent_traces(min(limit, 200)))
+
+
+@app.get("/api/conversations")
+def conversations(limit: int = 40):
+    return jsonable(engine().store.recent_conversations(min(limit, 200)))
+
+
+@app.get("/api/conversations/{conversation_id}")
+def conversation(conversation_id: str):
+    turns = engine().store.conversation(conversation_id)
+    if not turns:
+        raise HTTPException(404, "No such conversation")
+    return jsonable(turns)
 
 
 @app.get("/api/traces/{trace_id}")

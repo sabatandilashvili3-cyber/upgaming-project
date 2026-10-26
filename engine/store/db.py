@@ -148,16 +148,34 @@ class Store:
     def save_trace(self, t: dict):
         with self.pool.connection() as c:
             c.execute("""insert into traces (trace_id, question, report, steps, model, tokens_in, tokens_out,
-                                             cost_usd, latency_ms, error)
+                                             cost_usd, latency_ms, error, conversation_id)
                          values (%(trace_id)s, %(question)s, %(report)s, %(steps)s, %(model)s, %(tokens_in)s,
-                                 %(tokens_out)s, %(cost_usd)s, %(latency_ms)s, %(error)s)""",
-                      {**t, "report": json.dumps(t.get("report"), default=str),
+                                 %(tokens_out)s, %(cost_usd)s, %(latency_ms)s, %(error)s, %(conversation_id)s)""",
+                      {"conversation_id": None, **t, "report": json.dumps(t.get("report"), default=str),
                        "steps": json.dumps(t.get("steps", []), default=str)})
 
     def recent_traces(self, limit: int = 30):
         with self.pool.connection() as c:
             return c.execute("select trace_id, question, model, tokens_in, tokens_out, cost_usd, latency_ms, error, "
                              "created_at from traces order by created_at desc limit %s", (limit,)).fetchall()
+
+    def recent_conversations(self, limit: int = 40):
+        """One row per conversation (a trace without one is its own conversation), newest activity first;
+        titled by its first question."""
+        with self.pool.connection() as c:
+            return c.execute("""
+                select coalesce(conversation_id, trace_id) as conversation_id,
+                       (array_agg(question order by created_at))[1] as title,
+                       count(*) as turns, max(created_at) as last_at
+                from traces group by coalesce(conversation_id, trace_id)
+                order by max(created_at) desc limit %s""", (limit,)).fetchall()
+
+    def conversation(self, conversation_id: str):
+        """Every turn of a conversation, oldest first."""
+        with self.pool.connection() as c:
+            return c.execute("""select trace_id, question, report, steps, cost_usd, latency_ms, error, created_at
+                                from traces where conversation_id = %s or trace_id = %s
+                                order by created_at""", (conversation_id, conversation_id)).fetchall()
 
     def get_trace(self, trace_id: str):
         with self.pool.connection() as c:

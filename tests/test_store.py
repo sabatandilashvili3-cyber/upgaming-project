@@ -131,3 +131,15 @@ def test_answer_cache_is_invalidated_by_any_document_change(ingestor, store):
     assert cache_key("  how long did INC-1   last? ", "m", "high", store.corpus_version()) == k1   # same question
     ingestor.ingest_file("changes.csv", CSV_V2)                                                    # documents changed
     assert cache_key("How long did INC-1 last?", "m", "high", store.corpus_version()) != k1
+
+
+def test_conversation_groups_turns_in_order(store):
+    for i, (q, conv) in enumerate([("How long did INC-1 last?", "c1"), ("what caused it?", "c1"), ("unrelated", None)]):
+        store.save_trace({"trace_id": f"t{i}", "question": q, "report": {"summary": f"s{i}"}, "steps": [], "model": "m",
+                          "tokens_in": 0, "tokens_out": 0, "cost_usd": 0, "latency_ms": 1, "error": None,
+                          "conversation_id": conv})
+    turns = store.conversation("c1")
+    assert [t["question"] for t in turns] == ["How long did INC-1 last?", "what caused it?"]
+    convs = {c["conversation_id"]: c for c in store.recent_conversations()}
+    assert convs["c1"]["title"] == "How long did INC-1 last?" and convs["c1"]["turns"] == 2
+    assert convs["t2"]["turns"] == 1                     # a lone question is its own conversation

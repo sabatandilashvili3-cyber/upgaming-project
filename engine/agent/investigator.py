@@ -53,13 +53,37 @@ is missing. "Not established by the documents" is a correct answer; a guess is n
 Finish by calling submit_report exactly once."""
 
 
-def cache_key(question: str, model: str, effort: str, corpus_version: str) -> str:
+MAX_HISTORY = 3
+
+
+def conversation_preamble(history) -> str:
+    """Earlier turns, so "it" and "that service" can be resolved. Only questions and verified
+    summaries travel forward, never raw evidence: the follow-up must cite documents again."""
+    lines = ["Earlier in this conversation (use it to understand what the new question refers to; "
+             "it is NOT evidence, so cite documents again for every fact):"]
+    for q, a in history:
+        lines.append(f"- Question: {q}\n  Answer: {a or '(no answer was established)'}")
+    return "\n".join(lines) + "\n\nNew question: "
+
+
+def prefetch_query(question: str, history) -> str:
+    """The first search for a follow-up like "how much revenue did it generate" carries the ids the
+    previous turn was about, so it finds INC-2026-016's documents instead of searching for "it"."""
+    from ..ingest.loaders import ID_RE
+    if not history or ID_RE.search(question):
+        return question
+    prev_q, prev_a = history[-1]
+    ids = list(dict.fromkeys(ID_RE.findall(prev_q) + ID_RE.findall(prev_a or "")))[:3]
+    return f"{question} {' '.join(ids)}".strip()
+
+
+def cache_key(question: str, model: str, effort: str, corpus_version: str, history=()) -> str:
     """Same question + same model settings + same prompt and tools + same documents = same report.
     The corpus version changes on every upload/delete, so a cached answer never outlives its evidence."""
     import hashlib, json
     norm = " ".join(question.lower().split())
     prompt = hashlib.sha256((SYSTEM + json.dumps([t.schema for t in TOOLS], sort_keys=True)).encode()).hexdigest()[:16]
-    return hashlib.sha256(json.dumps([norm, model, effort, prompt, corpus_version]).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([norm, model, effort, prompt, corpus_version, list(history)]).encode()).hexdigest()
 
 
 @dataclass
@@ -86,9 +110,11 @@ class Investigator:
         always exactly that search, a full ~4.5 s model round trip that did no reasoning."""
         self.llm, self.retriever, self.max_steps, self.prefetch = llm, retriever, max_steps, prefetch
 
-    def run(self, question: str, on_event=None, tags=()) -> Investigation:
+    def run(self, question: str, on_event=None, tags=(), history=()) -> Investigation:
+        """history: earlier turns of the same conversation, [(question, answer summary)], oldest first."""
         emit = on_event or (lambda kind, data: None)
         inv = Investigation(uuid.uuid4().hex[:12], question)
+        inv.history = list(history)[-MAX_HISTORY:]
         with obs.investigation_trace(question, tags=tags, metadata={"model": self.llm.model}) as root:
             self._run(inv, emit)
             if root is not None:
@@ -113,16 +139,20 @@ class Investigator:
         box = Toolbox(self.retriever)
         submitted, reminded = None, False
         try:
+            history = getattr(inv, "history", [])
+            query = prefetch_query(question, history)
             opening = question
             if self.prefetch:
-                with obs.observation("search (prefetch)", as_type="tool", input={"query": question}) as span:
-                    content, is_error = box.run("search", {"query": question})
+                with obs.observation("search (prefetch)", as_type="tool", input={"query": query}) as span:
+                    content, is_error = box.run("search", {"query": query})
                     if span is not None:
                         span.update(output=content[:8000], level="ERROR" if is_error else "DEFAULT")
                 if not is_error:
                     opening = (f"{question}\n\nA first search for the question already ran; its results are below. "
                                f"Search further only for what they do not cover.\n\n{content}")
-                emit("tool", {"name": "search", "input": {"query": question}, "error": is_error})
+                emit("tool", {"name": "search", "input": {"query": query}, "error": is_error})
+            if history:
+                opening = conversation_preamble(history) + opening
             conv = self.llm.start(SYSTEM, opening, TOOLS)
             for step in range(self.max_steps):
                 # a span, not a generation: the Langfuse SDK already records each Anthropic call as a

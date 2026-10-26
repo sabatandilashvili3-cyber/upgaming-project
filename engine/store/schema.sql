@@ -64,3 +64,7 @@ create table if not exists llm_cache (
     response   jsonb not null,
     created_at timestamptz not null default now()
 );
+
+-- conversations: a follow-up question shares its conversation_id with the questions before it
+alter table traces add column if not exists conversation_id text;
+create index if not exists traces_conversation on traces (conversation_id, created_at);
