@@ -13,9 +13,11 @@ DEFAULT_RERANKER = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 
 class Reranker:
-    def __init__(self, model_name: str = DEFAULT_RERANKER):
+    def __init__(self, model_name: str = DEFAULT_RERANKER, max_length: int = 256):
+        # 256 tokens covers a 200-word chunk; 512 doubled the cost on the server's CPU for no
+        # measured gain (load test: 30 pairs x 512 tokens took 0.7-1.7 s per question)
         from sentence_transformers import CrossEncoder
-        self.model = CrossEncoder(model_name, max_length=512)
+        self.model = CrossEncoder(model_name, max_length=max_length)
 
     def rerank_fused(self, query: str, hits, top_n: int = 30):
         """Fuse the cross-encoder's order with the incoming order (RRF) instead of replacing it.

@@ -18,7 +18,7 @@ from ..llm.base import ToolSpec
 
 # config H-routed: best on every overall retrieval metric (eval/retrieval.py); the cross-encoder only
 # runs when the retriever has one and the question has no ids and no dates
-SEARCH_CFG = SearchConfig(mode="hybrid", boost=True, per_file=2, k=8, rerank_top=30, rerank_mode="fuse",
+SEARCH_CFG = SearchConfig(mode="hybrid", boost=True, per_file=2, k=8, rerank_top=15, rerank_mode="fuse",
                           rerank_when="plain")
 MAX_DOC_CHUNKS = 12
 

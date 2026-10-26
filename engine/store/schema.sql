@@ -39,6 +39,9 @@ create table if not exists lsh_bands (
     doc_id  text     not null references documents (doc_id) on delete cascade
 );
 create index if not exists lsh_lookup on lsh_bands (band, value);
+-- deleting a document cascades here; without this index every delete scanned ~1M rows
+-- (load test: deleting a 2,000-row file took 165 s)
+create index if not exists lsh_doc on lsh_bands (doc_id);
 
 -- one row per question asked: the full investigation trace, for the UI and for cost tracking
 create table if not exists traces (

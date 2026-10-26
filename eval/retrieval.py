@@ -52,10 +52,12 @@ CONFIGS = {
     "H-fused": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=30, rerank_mode="fuse")),
     "H-routed": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=30, rerank_mode="fuse",
                                             rerank_when="plain")),
+    "H-routed-15": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=15, rerank_mode="fuse",
+                                               rerank_when="plain")),
     "G-minilm": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2)),
 }
 MODEL_OF = {"G-minilm": "sentence-transformers/all-MiniLM-L6-v2"}
-CHAINED = {"F", "G", "H", "H-fused", "H-routed", "G-minilm"}
+CHAINED = {"F", "G", "H", "H-fused", "H-routed", "H-routed-15", "G-minilm"}
 
 
 def load_questions(n_hotpot, seed=13):
