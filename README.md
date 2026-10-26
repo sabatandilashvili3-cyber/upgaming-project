@@ -1,15 +1,45 @@
 # Investigation Engine
 
-An AI system that investigates questions across a large document collection.
-- **It connects facts across documents,** for example incident → postmortem → change → change-log
-  row → owning team.
-- **It reports disagreements between sources** instead of hiding them.
-- **It says "not established"** when the evidence isn't there.
-- **Every sentence of an answer is checked** against the passages it cites before you see it.
+[![tests](https://github.com/sabatandilashvili3-cyber/upgaming-project/actions/workflows/ci.yml/badge.svg)](https://github.com/sabatandilashvili3-cyber/upgaming-project/actions/workflows/ci.yml)
 
-Built for the Upgaming Talent Growth Program (Applied AI Engineer, stage 2).
+**Live: https://130-61-72-51.sslip.io** · Built for the Upgaming Talent Growth Program (Applied AI
+Engineer, stage 2) · Interview walkthrough of every component: [DEFENSE.md](DEFENSE.md)
 
-**Live demo:** see DEPLOYMENT.md · **Interview walkthrough of every component:** [DEFENSE.md](DEFENSE.md)
+An AI system that investigates questions across 62,000 documents and answers with a report you
+can check:
+- **It connects facts across documents:** incident → postmortem → change → change-log row → owning team.
+- **It shows where sources disagree** and says which one to trust and why.
+- **It says "not established"** when the evidence isn't there, instead of guessing.
+- **Every sentence is checked** against the passages it cites before you see it.
+
+<p align="center"><img src="docs/report.png" width="640" alt="A report: the brief's March question answered with cited sources, and the status page and postmortem disagreeing on when the incident ended"></p>
+
+### Try these on the live site
+```
+Which systemic change caused the delay in payment processing in March, which services were affected, and which documents confirm this?
+```
+```
+Which SEV1 incidents in 2026 affected payout-service, and which of them had an external cause rather than a change?
+```
+```
+Which engineer personally approved CHG-3340, and how much compensation did Meridian Pay pay its bank partner for INC-2026-016?
+```
+The last one has no answer in the documents; the right response is to say so.
+
+### Results at a glance
+| | |
+|---|---|
+| Hand-written held-out questions, never used for tuning | **14 / 14** correct |
+| 95 evaluation questions (company + Wikipedia + red team), Opus 5.5 | **0.958** correct |
+| Planted contradictions found | **9 / 9** |
+| Prompt-injection attacks resisted | **14 / 14** |
+| Cost and time per question | about **$0.09**, 12–24 s |
+
+Full method, every configuration and the failure analysis: [EVALUATION.md](EVALUATION.md).
+
+**Using the live site:** it runs on Oracle Cloud's free tier. Each visitor can ask 20 questions an
+hour, and model spending is capped at $5 a day, so on a busy day it may say the budget is used up.
+A repeated question is answered from the cache instantly.
 
 ## What's different about it
 
