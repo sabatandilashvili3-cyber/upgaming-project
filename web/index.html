@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Investigation Engine</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230d0d0d'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='5'/%3E%3Cpath d='m14.5 14.5 4 4'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGlkPSJMYXllcl8xIiBkYXRhLW5hbWU9IkxheWVyIDEiIHZpZXdCb3g9IjAgMCA5NiA5NiI+CiAgPGRlZnM+CiAgICA8c3R5bGU+LmNscy0xe2ZpbGw6bm9uZTt9LmNscy0ye2ZpbGw6IzFkZTliNjtmaWxsLXJ1bGU6ZXZlbm9kZDt9PC9zdHlsZT4KICA8L2RlZnM+CiAgPHRpdGxlPlVwZ2FtaW5nIEZhdmljb248L3RpdGxlPgogIDxyZWN0IGNsYXNzPSJjbHMtMSIgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2Ij48L3JlY3Q+CiAgPHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjAuOSw2Ny4yNiwyNS4yOSw3MGEyLjM3LDIuMzcsMCwwLDAsMy41Ny0yVjM4LjEzYTIuMjksMi4yOSwwLDAsMSwxLjE4LTJMNjcuNjEsMTQuMzFsOS43Nyw1LjYzTDM5LjYyLDQxLjYzYTIuNCwyLjQsMCwwLDAtMS4xOCwyVjg3LjE2TDEwLjkzLDcxLjI0YTMuMTcsMy4xNywwLDAsMS0xLjU2LTIuNzFWMjYuODVhMi4yOCwyLjI4LDAsMCwxLDEuMTgtMkw0OC4xOCwzLjEsNTgsOC43NCwyMC4yMywzMC4zMmEyLjQzLDIuNDMsMCwwLDAtMS4zMSwyVjY0YTQsNCwwLDAsMCwyLDMuMzEiPjwvcGF0aD4KICA8cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik03Nyw1My40MWwtOS45Myw1LjdhMy4xNiwzLjE2LDAsMCwwLTEuNTksMi43NHY5LjM2bDE5LjktMTEuNDNBMy4xOSwzLjE5LDAsMCwwLDg3LDU3LjA3VjI5LjU2YTIuMzMsMi4zMywwLDAsMC0yLjI5LTIuMzYsMi40LDIuNCwwLDAsMC0xLjIxLjMyTDQ5LjQsNDcuMWEyLjMxLDIuMzEsMCwwLDAtMS4xOCwyVjkyLjc2bDcuNjctNC40MmEzLjE3LDMuMTcsMCwwLDAsMS41Ni0yLjcxVjU1LjI5YTIuMywyLjMsMCwwLDEsMS4xOC0ybDE5LjYxLTExLjR2OS41NWEyLjM3LDIuMzcsMCwwLDEtMS4yMSwyIj48L3BhdGg+Cjwvc3ZnPg==">
 <style>
 :root {
   --bg: #ffffff;
@@ -49,9 +49,8 @@ aside.side {
   display: flex; flex-direction: column; padding: 10px; gap: 2px;
 }
 .brand { display: flex; align-items: center; gap: 8px; padding: 8px 10px 12px; font-weight: 600; font-size: 14px; }
-.brand-mark { width: 22px; height: 22px; border-radius: 7px; background: var(--ink); color: #fff;
-              display: grid; place-items: center; }
-.brand-mark .icon { width: 14px; height: 14px; stroke-width: 2.2; }
+/* Upgaming's official mark (lifeat.upgaming.com design system), kept in its own colour */
+.brand-mark { width: 20px; height: 23px; flex: none; }
 .nav-btn {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 10px;
   font-size: 14px; color: var(--ink); text-align: left; transition: background .15s ease;
@@ -246,12 +245,13 @@ h2.section { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
-  <symbol id="i-lens" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/><path d="M8 10.5h5"/></symbol>
+  <symbol id="upgaming" viewBox="0 0 28 32"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.01829 22.8968L5.52309 23.8597C5.64693 23.9369 5.7885 23.9792 5.93346 23.9823C6.07841 23.9854 6.2216 23.9493 6.3485 23.8775C6.4754 23.8056 6.5815 23.7007 6.65605 23.5734C6.73059 23.446 6.77094 23.3008 6.77298 23.1523V12.4379C6.77357 12.2912 6.81156 12.1472 6.88319 12.0202C6.95483 11.8932 7.05762 11.7875 7.18139 11.7137L20.297 4L23.6986 6.00983L10.5473 13.7544C10.4245 13.8283 10.3225 13.9337 10.2514 14.0602C10.1802 14.1866 10.1424 14.3299 10.1417 14.4758V29.9958L0.548198 24.3228C0.382491 24.2248 0.244705 24.0842 0.148534 23.9148C0.0523625 23.7454 0.00115491 23.5531 0 23.3572V8.48C0.00058687 8.33331 0.0385783 8.18933 0.110212 8.06231C0.181846 7.93528 0.284637 7.82962 0.408407 7.75579L13.5295 0L16.9311 2.00982L3.79079 9.71228C3.66611 9.786 3.56251 9.89195 3.49036 10.0195C3.41821 10.1471 3.38003 10.2919 3.37964 10.4393V21.7151C3.38044 21.9512 3.43939 22.1832 3.55102 22.3898C3.66266 22.5964 3.82337 22.7708 4.01829 22.8968Z" fill="#1DE9B6"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M23.5862 17.965L20.1133 19.9945C19.9472 20.0927 19.8092 20.2338 19.713 20.4037C19.6168 20.5737 19.5658 20.7665 19.5651 20.9629V24.306L26.5136 20.2303C26.6793 20.1323 26.817 19.9916 26.9132 19.8222C27.0094 19.6528 27.0606 19.4606 27.0618 19.2646V9.44008C27.0598 9.29433 27.021 9.15158 26.949 9.02581C26.8771 8.90003 26.7745 8.79554 26.6513 8.72255C26.5281 8.64956 26.3885 8.61057 26.2461 8.6094C26.1038 8.60823 25.9636 8.64492 25.8393 8.71587L13.9434 15.7025C13.8196 15.7764 13.7168 15.882 13.6452 16.0091C13.5736 16.1361 13.5356 16.2801 13.535 16.4267V32.0001L16.2047 30.4225C16.3704 30.3246 16.5082 30.1839 16.6044 30.0145C16.7005 29.8451 16.7517 29.6529 16.7529 29.4569V18.6303C16.7532 18.4838 16.7908 18.34 16.8619 18.213C16.9331 18.086 17.0353 17.9802 17.1586 17.906L24.011 13.8387V17.2267C24.0112 17.3775 23.9719 17.5255 23.8972 17.6553C23.8224 17.7852 23.715 17.8921 23.5862 17.965Z" fill="#1DE9B6"/></symbol>
 </svg>
 
 <div class="app">
   <aside class="side" id="side" aria-label="Sidebar">
-    <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-lens"/></svg></span>Investigation Engine</div>
+    <div class="brand"><svg class="brand-mark" role="img" aria-label="Upgaming"><use href="#upgaming"/></svg>Investigation Engine</div>
     <button class="nav-btn" id="new"><svg class="icon"><use href="#i-new"/></svg>New investigation</button>
     <div class="side-label">Recent</div>
     <nav class="history" id="history" aria-label="Past investigations"><div class="history-empty">Your investigations appear here.</div></nav>
@@ -267,7 +267,7 @@ h2.section { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
   <main>
     <div class="topbar">
       <button class="icon-btn" id="open-side" aria-label="Open sidebar"><svg class="icon"><use href="#i-menu"/></svg></button>
-      <span style="font-weight:600;font-size:14px">Investigation Engine</span>
+      <span class="brand" style="padding:0"><svg class="brand-mark" role="img" aria-label="Upgaming"><use href="#upgaming"/></svg>Investigation Engine</span>
       <button class="icon-btn" id="new-top" aria-label="New investigation"><svg class="icon"><use href="#i-new"/></svg></button>
     </div>
 
