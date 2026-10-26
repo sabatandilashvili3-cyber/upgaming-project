@@ -23,8 +23,11 @@ class Store:
         # register the vector type on a throwaway connection first, so the extension exists
         with psycopg.connect(self.url, autocommit=True) as conn:
             conn.execute(SCHEMA)
+        # check: Neon's free tier suspends after 5 idle minutes and drops connections, so every
+        # connection is tested before use and idle ones are recycled instead of failing a request
         self.pool = ConnectionPool(self.url, min_size=min_size, max_size=max_size, open=True,
-                                   configure=lambda c: register_vector(c), kwargs={"row_factory": dict_row})
+                                   configure=lambda c: register_vector(c), kwargs={"row_factory": dict_row},
+                                   check=ConnectionPool.check_connection, max_idle=240)
 
     def close(self):
         self.pool.close()

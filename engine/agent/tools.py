@@ -59,6 +59,8 @@ TOOLS = [
                  "answerable": {"type": "boolean", "description": "false if the evidence does not answer the "
                                                                   "question; then explain what is missing in unknowns."},
                  "summary": {"type": "string", "description": "Two or three sentences answering the question."},
+                 "short_answer": {"type": "string", "description": "The answer in as few words as possible "
+                                                                 "(a name, a number, yes/no); empty if not answerable."},
                  "findings": {"type": "array", "items": _obj({
                      "text": {"type": "string", "description": "One factual sentence."},
                      "citations": {"type": "array", "items": {"type": "string"},

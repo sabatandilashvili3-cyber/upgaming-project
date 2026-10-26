@@ -55,6 +55,7 @@ class Investigation:
     question: str
     status: str = "running"            # answered | abstained | error
     report: dict = field(default_factory=dict)
+    draft: dict | None = None          # the model's submit_report input, before verification
     steps: list = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     cost_usd: float = 0.0
@@ -107,6 +108,7 @@ class Investigator:
                     conv.add_user_text("Step budget almost used: call submit_report next.")
         except LLMError as e:
             inv.error = f"{e.kind}: {e}"
+        inv.draft = submitted
         inv.report = finalise(question, submitted, box)
         inv.status = "error" if inv.error and submitted is None else inv.report["status"]
         inv.cost_usd = round(self.llm.cost_usd(inv.usage), 6)
@@ -164,5 +166,6 @@ def finalise(question, submitted, box: Toolbox) -> dict:
     sources = sorted({c["doc_id"] for f in findings for c in f["citations"]}
                      | {c["doc_id"] for t in timeline for c in t["citations"]})
     return {**base, "status": "answered" if answered else "abstained", "summary": summary,
+            "short_answer": submitted.get("short_answer", "") if answered else "",
             "findings": findings, "timeline": timeline, "unsupported": unsupported,
             "unknowns": submitted.get("unknowns", []), "sources": sources}

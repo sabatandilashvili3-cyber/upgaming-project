@@ -31,8 +31,8 @@ def tools(*calls):
 
 
 def report(answerable=True, findings=(), summary="", unknowns=()):
-    return tools(call("submit_report", 9, answerable=answerable, summary=summary, findings=list(findings),
-                      timeline=[], unknowns=list(unknowns)))
+    return tools(call("submit_report", 9, answerable=answerable, summary=summary, short_answer="",
+                      findings=list(findings), timeline=[], unknowns=list(unknowns)))
 
 
 # read_document lists a document's chunks in order, so aliases are predictable: E1, E2 (postmortem), E3 (status)
