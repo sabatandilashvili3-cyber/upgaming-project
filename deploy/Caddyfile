@@ -1,0 +1,8 @@
+# Caddy gets and renews the HTTPS certificate for this hostname automatically.
+{HOST} {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000 {
+		# server-sent events: send each step to the browser at once, don't buffer
+		flush_interval -1
+	}
+}

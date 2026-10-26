@@ -1,0 +1,25 @@
+name: tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      # CPU torch keeps the install small; the tests never load the embedding model
+      - run: uv pip install --system torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+      - run: grep -v -E "^(torch|nvidia-|triton|cuda-)" requirements.txt > req.txt && uv pip install --system -r req.txt pytest
+      - run: python -m pytest -q

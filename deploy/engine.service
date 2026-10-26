@@ -1,0 +1,17 @@
+[Unit]
+Description=Investigation Engine (FastAPI)
+After=network-online.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app
+EnvironmentFile=/etc/engine.env
+ExecStart=/home/ubuntu/app/.venv/bin/uvicorn engine.api.app:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+# the app is reachable only through Caddy on 443; never directly
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
