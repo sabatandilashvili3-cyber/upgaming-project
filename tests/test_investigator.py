@@ -171,3 +171,23 @@ def test_cache_key_depends_on_the_conversation():
     a = cache_key("how long did it last?", "m", "medium", "v1", [("about INC-1", "x")])
     b = cache_key("how long did it last?", "m", "medium", "v1", [("about INC-2", "y")])
     assert a != b and a == cache_key("How long did it   last?", "m", "medium", "v1", [("about INC-1", "x")])
+
+
+def test_list_incidents_is_complete_and_flags_status_only_matches():
+    from engine.agent.tools import Toolbox
+    docs = [("incidents/INC-2_report.pdf", "[Incident report INC-2] Severity: SEV1. Detected: 2026-03-14 17:07 UTC. "
+             "Services showing errors at the time of this report: ledger, payments-api. Initial assessment"),
+            ("status/2026-03-14_INC-2.html", "[Status: Balances, Payouts degraded] Started 2026-03-14 17:07 UTC."),
+            ("incidents/INC-3_report.pdf", "[Incident report INC-3] Severity: SEV2. Detected: 2026-04-01 10:00 UTC. "
+             "Services showing errors at the time of this report: payout-service."),
+            ("incidents/INC-4_report.pdf", "[Incident report INC-4] Severity: SEV1. Detected: 2026-05-01 10:00 UTC. "
+             "Services showing errors at the time of this report: bank-connector."),
+            ("postmortems/INC-4_postmortem.md", "[Postmortem INC-4 > Impact] - Affected services: bank-connector, payout-service")]
+    chunks = CHUNKS + [Chunk(d + "::0", d, t, {}) for d, t in docs]
+    emb = FakeEmbedder()
+    box = Toolbox(Retriever(chunks, emb.passages([c.text for c in chunks]), emb))
+    out, err = box.run("list_incidents", {"severity": "SEV1", "service": "payout-service", "start": "", "end": ""})
+    assert not err and out.startswith("2 of 4 incidents match")      # INC-1 has no severity: never matches SEV1
+    assert "INC-4 | 2026-05-01 | SEV1" in out and "POSSIBLE" in out.split("INC-4")[0]   # INC-2 via its status page
+    assert "INC-3 |" not in out                                        # SEV2
+    assert "Affected services: bank-connector, payout-service" in out  # the evidence passage itself is shown

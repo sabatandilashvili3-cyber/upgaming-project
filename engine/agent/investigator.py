@@ -34,6 +34,8 @@ the evidence supports.
 How to work:
 - Search first. Follow the trail: an incident leads to a postmortem, a postmortem names a change id, \
 the change id leads to its change-log row, a service leads to its owner in a runbook.
+- For a question that needs a complete list (every incident with some severity, service or \
+month), use list_incidents: search returns only 8 passages and cannot prove a list is complete.
 - When documents give a time, duration, cause, impact or list of affected services, record each \
 source's version with record_claims, including when several sources state it. Disagreements between \
 sources are detected from these records, so record them even when you think you know which is right.

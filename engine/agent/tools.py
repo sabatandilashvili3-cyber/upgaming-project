@@ -9,6 +9,7 @@ the system prompt says that text inside the tags is data, never instructions: th
 first line of defence against prompt injection planted in documents.
 """
 import json
+import re
 from dataclasses import dataclass, field
 
 from ..search.chain import chained_search
@@ -27,6 +28,12 @@ class ToolError(Exception):
     """The model asked for something impossible (unknown document ...). Sent back with is_error."""
 
 MAX_TIMELINE = 25
+MAX_INCIDENTS = 15
+
+INC_DOC_RE = re.compile(r"^(incidents|postmortems|status)/.*?(INC-\d+(?:-\d+)*)")
+SERVICES_RE = re.compile(r"(?:Services showing errors[^:]*|Affected services): ([a-z0-9-]+(?:, [a-z0-9-]+)*)")
+SEV_RE = re.compile(r"[Ss]everity:? (SEV\d)")
+START_RE = re.compile(r"(?:Detected:|Between|Started) (\d{4}-\d\d-\d\d)")
 
 
 def _obj(props: dict) -> dict:
@@ -48,6 +55,15 @@ TOOLS = [
              _obj({"term": {"type": "string", "description": "A service name, id or keyword."},
                    "start": {"type": "string", "description": "YYYY-MM-DD, inclusive."},
                    "end": {"type": "string", "description": "YYYY-MM-DD, inclusive."}})),
+    ToolSpec("list_incidents", "List EVERY incident matching a filter, built from all incident reports, "
+             "postmortems and status pages, with their evidence passages. Use it for questions that need a "
+             "complete list (all SEV1s, every incident that hit a service, incidents in a month): search "
+             "returns only 8 passages and cannot show a complete list. Pass an empty string for a filter "
+             "you do not need.",
+             _obj({"severity": {"type": "string", "description": "e.g. SEV1, or empty for any."},
+                   "service": {"type": "string", "description": "A service name, e.g. payout-service, or empty."},
+                   "start": {"type": "string", "description": "YYYY-MM-DD inclusive, or empty."},
+                   "end": {"type": "string", "description": "YYYY-MM-DD inclusive, or empty."}})),
     ToolSpec("record_claims", "Record the key facts you read, one claim per source passage, so that "
              "disagreements between sources can be detected. Record the same fact from every source that "
              "states it, especially times, durations, causes, impact and affected services. Returns any "
@@ -74,6 +90,38 @@ TOOLS = [
                  "unknowns": {"type": "array", "items": {"type": "string"},
                               "description": "What the documents do not establish."}})),
 ]
+
+
+def incident_index(chunks) -> dict:
+    """One row per incident from its report, postmortem and status page: severity, start date, the
+    services the documents name, and the passages that say so. A search ranks passages; a "which
+    incidents ..." question needs every row, so this scans instead."""
+    idx = {}
+    for c in chunks:
+        m = INC_DOC_RE.match(c.doc_id)
+        if not m:
+            continue
+        kind, inc = m.groups()
+        row = idx.setdefault(inc, {"severity": set(), "date": None, "services": set(), "status": "",
+                                   "postmortem": False, "chunks": []})
+        row["severity"].update(SEV_RE.findall(c.text))
+        for found in SERVICES_RE.findall(c.text):
+            row["services"].update(found.split(", "))
+        if (d := START_RE.search(c.text)) and (row["date"] is None or d.group(1) < row["date"]):
+            row["date"] = d.group(1)
+        if kind == "status":
+            row["status"] += " " + c.text.lower()
+        row["postmortem"] |= kind == "postmortems"
+        # the passages that carry the row's facts; postmortem summary, timeline and actions add nothing
+        if kind != "postmortems" or "> Impact]" in c.text or "> Root cause]" in c.text:
+            row["chunks"].append(c)
+    return idx
+
+
+def status_mentions(service: str, status_text: str) -> bool:
+    """Status pages name products ("Payouts"), not services: a loose match, reported as such."""
+    stem = service.removesuffix("-service").split("-")[0]
+    return len(stem) > 3 and stem in status_text
 
 
 @dataclass
@@ -150,6 +198,35 @@ class Toolbox:
         more = f"\n({len(rows) - MAX_TIMELINE} more not shown; narrow the window)" if len(rows) > MAX_TIMELINE else ""
         return "\n".join(self.book.render(c.chunk_id, c.doc_id, c.text, c.meta)
                          for _, c in rows[:MAX_TIMELINE]) + more
+
+    def _t_list_incidents(self, severity: str, service: str, start: str, end: str) -> str:
+        idx = incident_index(self.retriever.chunks.values())
+        rows = []
+        for inc, r in sorted(idx.items()):
+            if severity and severity.upper() not in r["severity"]:
+                continue
+            if (start and (r["date"] or "") < start) or (end and (r["date"] or "9999") > end):
+                continue
+            named = service in r["services"]
+            # without a postmortem the named list is only what on-call saw early, so a status-page
+            # product mention counts, flagged as possible; with one, the postmortem's list is complete
+            if service and not named and (r["postmortem"] or not status_mentions(service, r["status"])):
+                continue
+            rows.append((inc, r, named))
+        filt = ", ".join(f"{k}={v}" for k, v in [("severity", severity), ("service", service),
+                                                ("start", start), ("end", end)] if v) or "no filter"
+        head = [f"{len(rows)} of {len(idx)} incidents match ({filt}). Every incident with a report, "
+                f"postmortem or status page in the collection was checked, so this list is complete."]
+        for inc, r, named in rows:
+            how = "" if not service or named else f" | POSSIBLE: no postmortem, {service} not named; the status page mentions it only as a product"
+            head.append(f"{inc} | {r['date']} | {'/'.join(sorted(r['severity'])) or 'severity not stated'} | "
+                        f"services named: {', '.join(sorted(r['services'])) or 'none'} | "
+                        f"postmortem: {'yes' if r['postmortem'] else 'no'}{how}")
+        shown = rows[:MAX_INCIDENTS]
+        if len(rows) > len(shown):
+            head.append(f"(evidence below for the first {len(shown)}; narrow the filter for the rest)")
+        ev = [self.book.render(c.chunk_id, c.doc_id, c.text, c.meta) for _, r, _ in shown for c in r["chunks"]]
+        return "\n".join(head + ev)
 
     def _t_record_claims(self, claims: list) -> str:
         bad = []
