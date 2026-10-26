@@ -15,6 +15,8 @@ if [ "${2:-}" = "--data" ]; then
   rsync -az data/cache/structural "ubuntu@$IP:app/data/cache/"
 fi
 $SSH "test -d app/.venv || sudo bash app/deploy/setup_server.sh $IP"
+# keep dependencies in step with requirements.txt (a no-op when nothing changed)
+$SSH "cd app && grep -v -E '^(torch|nvidia-|triton|cuda-)' requirements.txt > /tmp/req.txt && .venv/bin/pip install -q -r /tmp/req.txt"
 if [ "${2:-}" = "--data" ]; then
   $SSH "cd app && set -a && . /etc/engine.env && set +a && .venv/bin/python -m engine.store.bulk --strategy structural"
 fi

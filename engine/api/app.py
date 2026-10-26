@@ -183,7 +183,7 @@ def investigate(body: AskIn, request: Request):
     events: queue.Queue = queue.Queue()
 
     def work():
-        inv = Investigator(state["llm"], eng.retriever).run(body.question,
+        inv = Investigator(state["llm"], eng.retriever).run(body.question, tags=["web"],
                                                             on_event=lambda k, d: events.put((k, d)))
         eng.store.save_trace({"trace_id": inv.trace_id, "question": inv.question, "report": inv.report,
                               "steps": inv.steps, "model": state["llm"].model,
@@ -191,7 +191,8 @@ def investigate(body: AskIn, request: Request):
                                            + inv.usage.cache_write_tokens,
                               "tokens_out": inv.usage.output_tokens, "cost_usd": inv.cost_usd,
                               "latency_ms": inv.latency_ms, "error": inv.error})
-        events.put(("report", {"trace_id": inv.trace_id, "status": inv.status, "error": inv.error,
+        events.put(("report", {"trace_id": inv.trace_id, "langfuse_trace_id": inv.lf_trace_id,
+                               "status": inv.status, "error": inv.error,
                                "report": inv.report, "cost_usd": inv.cost_usd, "latency_ms": inv.latency_ms,
                                "usage": inv.usage.__dict__}))
         events.put(None)

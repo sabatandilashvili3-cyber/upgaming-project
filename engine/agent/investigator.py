@@ -18,6 +18,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
+from .. import observability as obs
 from ..llm.base import LLMError, ToolResult, Usage
 from .claims import find_contradictions
 from .tools import TOOLS, Toolbox
@@ -61,22 +62,52 @@ class Investigation:
     cost_usd: float = 0.0
     latency_ms: int = 0
     error: str | None = None
+    lf_trace_id: str | None = None     # Langfuse trace, when tracing is configured
 
 
 class Investigator:
     def __init__(self, llm, retriever, max_steps: int = MAX_STEPS):
         self.llm, self.retriever, self.max_steps = llm, retriever, max_steps
 
-    def run(self, question: str, on_event=None) -> Investigation:
+    def run(self, question: str, on_event=None, tags=()) -> Investigation:
         emit = on_event or (lambda kind, data: None)
         inv = Investigation(uuid.uuid4().hex[:12], question)
+        with obs.investigation_trace(question, tags=tags, metadata={"model": self.llm.model}) as root:
+            self._run(inv, emit)
+            if root is not None:
+                inv.lf_trace_id = root.trace_id
+                r = inv.report
+                root.update(output={"status": inv.status, "summary": r.get("summary"),
+                                    "findings": [f["text"] for f in r.get("findings", [])],
+                                    "contradictions": len(r.get("contradictions", [])),
+                                    "unknowns": r.get("unknowns"), "error": inv.error},
+                            level="ERROR" if inv.status == "error" else "DEFAULT")
+                root.score_trace(name="status", value=inv.status, data_type="CATEGORICAL")
+                root.score_trace(name="findings_kept", value=len(r.get("findings", [])))
+                root.score_trace(name="sentences_dropped", value=len(r.get("unsupported", [])))
+                root.score_trace(name="contradictions", value=len(r.get("contradictions", [])))
+                root.score_trace(name="cost_usd", value=inv.cost_usd)
+                root.score_trace(name="steps", value=len(inv.steps))
+        return inv
+
+    def _run(self, inv: Investigation, emit):
+        question = inv.question
         t0 = time.time()
         box = Toolbox(self.retriever)
         submitted, reminded = None, False
         try:
             conv = self.llm.start(SYSTEM, question, TOOLS)
             for step in range(self.max_steps):
-                turn = conv.step()
+                # a span, not a generation: the Langfuse SDK already records each Anthropic call as a
+                # generation (tokens, cost) inside it; a second generation here would double the cost
+                with obs.observation(f"claude step {step + 1}", as_type="span",
+                                     input={"question": question} if step == 0 else {"step": step + 1}) as span:
+                    turn = conv.step()
+                    if span is not None:
+                        span.update(output={"text": turn.text, "tool_calls": [{"name": c.name, "input": c.input}
+                                                                              for c in turn.tool_calls]},
+                                    metadata={"stop_reason": turn.stop, "detail": turn.detail,
+                                              "cost_usd": self.llm.cost_usd(turn.usage)})
                 inv.usage.add(turn.usage)
                 inv.steps.append({"step": step + 1, "stop": turn.stop, "text": turn.text[:500],
                                   "calls": [{"name": c.name, "input": c.input} for c in turn.tool_calls],
@@ -98,7 +129,10 @@ class Investigator:
                         submitted = call.input
                         results.append(ToolResult(call.id, "Report received."))
                         continue
-                    content, is_error = box.run(call.name, call.input)
+                    with obs.observation(call.name, as_type="tool", input=call.input) as span:
+                        content, is_error = box.run(call.name, call.input)
+                        if span is not None:
+                            span.update(output=content[:8000], level="ERROR" if is_error else "DEFAULT")
                     results.append(ToolResult(call.id, content, is_error))
                     emit("tool", {"name": call.name, "input": call.input, "error": is_error})
                 if submitted is not None:
@@ -109,12 +143,16 @@ class Investigator:
         except LLMError as e:
             inv.error = f"{e.kind}: {e}"
         inv.draft = submitted
-        inv.report = finalise(question, submitted, box)
+        with obs.observation("verify", as_type="evaluator", input={"draft": submitted}) as span:
+            inv.report = finalise(question, submitted, box)
+            if span is not None:
+                span.update(output={"kept": len(inv.report["findings"]) + len(inv.report["timeline"]),
+                                    "dropped": inv.report["unsupported"],
+                                    "contradictions": inv.report["contradictions"]})
         inv.status = "error" if inv.error and submitted is None else inv.report["status"]
         inv.cost_usd = round(self.llm.cost_usd(inv.usage), 6)
         inv.latency_ms = int((time.time() - t0) * 1000)
         emit("done", {"status": inv.status})
-        return inv
 
 
 def finalise(question, submitted, box: Toolbox) -> dict:
