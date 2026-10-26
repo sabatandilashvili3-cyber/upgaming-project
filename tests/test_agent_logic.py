@@ -77,3 +77,28 @@ def test_verifier_rejects_invented_number_and_unknown_source():
     assert not v.supported and v.missing == ["300 minutes"]
     assert check("Lasted 220 minutes.", ["c9"], ev).reason == "cites a source that was never retrieved"
     assert check("Lasted 220 minutes.", [], ev).reason == "no citation"
+
+
+# ---------------------------------------------------------------- verifier v2 (found in the first eval run)
+def test_version_is_one_fact_not_a_torn_number():
+    assert hard_facts("deployed v1.9.19 on ledger") == ["v1.9.19"]
+    assert check("Version v1.9.19 was deployed.", ["c1"], {"c1": "version: v1.9.19"}).supported
+
+
+def test_facts_from_the_question_are_given():
+    ev = {"c1": "CHG-2113 config change on api-gateway"}
+    assert not check("CHG-2113 preceded INC-2026-002.", ["c1"], ev).supported
+    assert check("CHG-2113 preceded INC-2026-002.", ["c1"], ev, given="What caused INC-2026-002?").supported
+
+
+def test_find_support_repairs_only_from_passages_that_contain_every_fact():
+    from engine.agent.verify import find_support
+    ev = {"E1": "status: resolved 19:07 UTC", "E2": "postmortem: recovered 20:27 UTC", "E3": "20:27 alert"}
+    assert find_support(["20:27"], ev, exclude={"E1"}) in ("E2", "E3")
+    assert find_support(["20:27", "300 minutes"], ev) is None
+
+
+def test_split_sentences_keeps_versions_and_decimals():
+    from engine.agent.verify import split_sentences
+    assert split_sentences("It ran v1.9.19 for 2.4 s. Then it failed. (Twice.)") == \
+        ["It ran v1.9.19 for 2.4 s.", "Then it failed.", "(Twice.)"]

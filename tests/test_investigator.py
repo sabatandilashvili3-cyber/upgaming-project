@@ -119,3 +119,26 @@ def test_search_wraps_evidence_and_marks_authority():
     inv, llm = run([tools(call("search", 1, query="INC-1 duration")), report(answerable=False, unknowns=["x"])])
     content = next(e[1] for e in llm.log if e[0] == "results")[0].content
     assert content.count("<evidence id=") >= 2 and 'kind="postmortem" authority="4"' in content
+
+
+def test_missing_citation_is_repaired_and_labelled():
+    # the 120 minutes is in E3 (status page), which the model read but did not cite
+    inv, _ = run([READ_BOTH, report(findings=[
+        {"text": "The postmortem says 220 minutes but the status page says 120 minutes.", "citations": ["E1"]}])])
+    (f,) = inv.report["findings"]
+    assert [c["evidence_id"] for c in f["citations"]] == ["E1", "E3"]
+    assert f["citations"][1]["added_by_verifier"] is True
+
+
+def test_bad_summary_sentence_removed_alone():
+    inv, _ = run([READ_BOTH, report(findings=[{"text": "Payments delayed: 34%.", "citations": ["E1"]}],
+                                    summary="INC-1 delayed 34% of payments. Revenue fell 40,000 GEL.")])
+    assert inv.report["summary"] == "INC-1 delayed 34% of payments."
+    assert inv.report["unsupported"][0]["missing"] == ["40,000"]
+
+
+def test_report_can_be_reverified_offline_from_saved_evidence():
+    from engine.agent.investigator import verify_report
+    inv, _ = run([READ_BOTH, CLAIMS, report(findings=[{"text": "INC-1 lasted 220 minutes.", "citations": ["E1"]}])])
+    again = verify_report(inv.question, inv.draft, inv.evidence, inv.claims)
+    assert again["findings"] == inv.report["findings"] and again["contradictions"] == inv.report["contradictions"]

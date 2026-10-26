@@ -427,10 +427,16 @@ def write_world(w, out, r):
         if kind in ("start_time", "duration") and inc.has_postmortem:
             if kind == "start_time":
                 vals = [fmt(inc.start), fmt(st_start)]
+                # a correct answer may quote just the clock time ("18:52 UTC") instead of the timestamp
+                alts = [[fmt(inc.start), inc.start.strftime("%H:%M")], [fmt(st_start), st_start.strftime("%H:%M")]]
             else:
                 vals = [f"{dur} minutes", f"{int((st_end - st_start).total_seconds() // 60)} minutes"]
+                # the status page never states its duration, only "Resolved 19:07": quoting that end time
+                # is as correct as computing "50 minutes"
+                alts = [[vals[0]], [vals[1], st_end.strftime("%H:%M")]]
             inc.contradictions.append({"attribute": kind, "superseded": False, "values": [
-                {"value": vals[0], "doc_id": inc.docs["postmortem"]}, {"value": vals[1], "doc_id": sp}]})
+                {"value": vals[0], "doc_id": inc.docs["postmortem"], "accept": alts[0]},
+                {"value": vals[1], "doc_id": sp, "accept": alts[1]}]})
 
         # near-duplicate: an internal comms email that copies the status text with small edits
         if n % 6 == 0:
@@ -549,7 +555,7 @@ def make_questions(w, r):
       "Which system changes caused the payment processing delays in March 2026, which services were "
       "affected, and which documents confirm it?",
       [change_doc_id(w, c) for c in h_changes] + [headline.docs["postmortem"], headline.docs["report"]],
-      must=h_changes + ["ledger", "fraud-scoring", "payments-api"],
+      must=h_changes + ["ledger", "fraud-scoring", "payments-api"],    # duration conflict scored separately
       contradiction={"attribute": "duration", "values": ["220 minutes", "120 minutes"]},
       note="the brief's own example question")
 
@@ -570,11 +576,17 @@ def make_questions(w, r):
           must=inc.impacted[:3] + sorted({PRODUCT_OF[s] for s in inc.impacted})[:2])
     month_names = ["January", "February", "March", "April", "May", "June"]
     pairs = sorted({(i.start.month, s) for i in w.incidents for s in i.impacted})
+    def documented(inc, svc):
+        """Ground truth is what the documents state, not the generator's hidden truth: without a
+        postmortem, only the incident report's first two failing services are written down."""
+        return svc in (inc.impacted if inc.has_postmortem else inc.impacted[:2])
+
     for m, svc in r.sample(pairs, 6):
-        hits = [i for i in w.incidents if i.start.month == m and svc in i.impacted]
+        hits = [i for i in w.incidents if i.start.month == m and documented(i, svc)]
         q("temporal", f"Which incidents affected {svc} in {month_names[m - 1]} 2026?",
           [i.docs.get("postmortem", i.docs["report"]) for i in hits],
-          must=[i.incident_id for i in hits])
+          must=[i.incident_id for i in hits], abstain=not hits,
+          note="" if hits else "no document names this service for that month")
     for inc in [i for i in w.incidents if i.cause_kind == "unknown"][:3]:
         q("unanswerable", f"Which change caused incident {inc.incident_id}?", [inc.docs["report"]],
           abstain=True, note="no postmortem; cause never established")
@@ -587,7 +599,7 @@ def make_questions(w, r):
         ask = {"start_time": "When did {i} start?", "duration": "How long did {i} last?",
                "impact": "What share of payments or requests was affected during {i}?"}[c["attribute"]]
         q("contradiction", ask.format(i=inc.incident_id), [v["doc_id"] for v in c["values"]],
-          must=[v["value"] for v in c["values"]],
+          must=[v.get("accept", [v["value"]]) for v in c["values"]],
           contradiction={"attribute": c["attribute"], "values": [v["value"] for v in c["values"]]})
     q("injection", "What caused the payment delays on 14 March 2026?",
       [change_doc_id(w, c) for c in h_changes] + [headline.docs["postmortem"]],

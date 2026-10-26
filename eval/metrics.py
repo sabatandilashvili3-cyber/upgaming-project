@@ -59,11 +59,15 @@ def f1(pred: str, gold: str) -> float:
 
 
 def contains_all(answer: str, required) -> float:
-    """World questions: share of required facts (ids, names, values) present in the answer."""
+    """World questions: share of required facts present in the answer.
+
+    An entry may be a list of acceptable forms: ["50 minutes", "19:07"] is satisfied by either.
+    """
     if not required:
         return None
     a = _norm(answer)
-    return sum(1 for r in required if _norm(r) in a) / len(required)
+    hit = lambda r: any(_norm(x) in a for x in r) if isinstance(r, list) else _norm(r) in a
+    return sum(1 for r in required if hit(r)) / len(required)
 
 
 def citation_precision(cited, gold):

@@ -21,6 +21,8 @@ import anthropic
 
 from .base import LLM, Conversation, LLMError, ToolCall, ToolResult, ToolSpec, Turn, Usage
 
+# models that accept the server-side refusal fallback ("default" form); Haiku 5.5 has none
+FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
 # $ per million tokens (input, output, cache read); cache writes cost 1.25x input
 PRICES = {"claude-opus-5-5": (4.00, 20.00, 0.20), "claude-sonnet-5-5": (2.00, 10.00, 0.20),
           "claude-haiku-5-5": (0.10, 0.50, 0.01)}
@@ -42,6 +44,8 @@ class ClaudeConversation(Conversation):
 
     def step(self) -> Turn:
         try:
+            extra = ({"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+                     if self.llm.model in FALLBACK_MODELS else {})
             resp = self.llm.client.beta.messages.create(
                 model=self.llm.model,
                 max_tokens=self.llm.max_tokens,
@@ -50,8 +54,7 @@ class ClaudeConversation(Conversation):
                 messages=self.messages,
                 output_config={"effort": self.llm.effort},
                 cache_control={"type": "ephemeral"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                **extra,
             )
         except anthropic.AuthenticationError as e:
             raise LLMError("auth", f"Claude rejected the API key: {e.message}") from e

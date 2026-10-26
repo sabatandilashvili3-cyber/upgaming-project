@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 FACT_PATTERNS = [
     r"\b[A-Z]{2,5}(?:-\d{2,5})+\b",                            # ids
+    r"\bv\d+(?:\.\d+)+\b|\b\d+\.\d+\.\d+\b",                    # versions, kept whole: v1.9.19 is one fact
     r"\b20\d\d-\d\d-\d\d\b",                                   # dates
     r"\b\d{1,2}:\d\d\b",                                       # clock times
     r"\b\d+(?:\.\d+)?\s*%",                                    # percentages
@@ -50,15 +51,39 @@ class Verdict:
     missing: list = field(default_factory=list)
 
 
-def check(sentence: str, cited_ids, evidence: dict) -> Verdict:
-    """evidence: chunk_id -> chunk text, for every chunk retrieved in this investigation."""
+def check(sentence: str, cited_ids, evidence: dict, given: str = "") -> Verdict:
+    """evidence: id -> text, for every passage retrieved in this investigation.
+
+    given: text the sentence may restate without a source, i.e. the question itself.
+    "Before the incident INC-2026-002" names the incident the user asked about; that is
+    not a claim the cited change-log row has to contain.
+    """
     if not cited_ids:
         return Verdict(False, "no citation")
     unknown = [c for c in cited_ids if c not in evidence]
     if unknown:
         return Verdict(False, "cites a source that was never retrieved", unknown)
-    corpus = _squash(" ".join(evidence[c] for c in cited_ids))
+    corpus = _squash(" ".join(evidence[c] for c in cited_ids) + " " + given)
     missing = [f for f in hard_facts(sentence) if not _present(_squash(f), corpus)]
     if missing:
         return Verdict(False, "facts not found in the cited sources", missing)
     return Verdict(True)
+
+
+def find_support(missing, evidence: dict, exclude=()):
+    """A passage the model DID read that contains every missing fact, or None.
+
+    Used for citation repair: "conflicts with the postmortem's 20:27" citing only the status
+    page is grounded, the model just forgot to cite the postmortem it read. The repaired
+    citation is labelled, so the report shows it was added by the verifier.
+    """
+    wanted = [_squash(m) for m in missing]
+    for eid, text in evidence.items():
+        if eid not in exclude and all(_present(w, _squash(text)) for w in wanted):
+            return eid
+    return None
+
+
+def split_sentences(text: str):
+    """Sentence split that leaves "v1.9.19", "2.4 s" and "e.g." alone."""
+    return [p.strip() for p in re.split(r"(?<=[.!?])\s+(?=[A-Z(\"])", text.strip()) if p.strip()]
