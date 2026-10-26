@@ -15,6 +15,7 @@ Writes (upload, delete) need the ADMIN_TOKEN header when one is configured, so t
 public demo can't be emptied by a visitor. Investigations are rate limited per client
 and capped by a daily spend budget, because every one costs real money.
 """
+import hmac
 import json
 import os
 import queue
@@ -92,7 +93,7 @@ def spent_today(store) -> float:
 
 def require_admin(token: str | None):
     expected = os.environ.get("ADMIN_TOKEN")
-    if expected and token != expected:
+    if expected and not hmac.compare_digest(token or "", expected):   # constant time: no timing leak
         raise HTTPException(401, "Uploads and deletes need the admin token on this deployment.")
 
 

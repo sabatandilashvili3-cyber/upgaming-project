@@ -10,7 +10,6 @@ claim, and must quote the sentence its verdict rests on. Validated against hand-
 cases in tests/test_judge_cases.json before being used for scores.
 """
 import json
-import os
 
 import anthropic
 

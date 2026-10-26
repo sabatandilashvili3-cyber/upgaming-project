@@ -25,9 +25,7 @@ Every question costs real money; the script prints an estimate and asks first.
 import argparse
 import json
 import random
-import time
 from collections import defaultdict
-from pathlib import Path
 
 import numpy as np
 from dotenv import load_dotenv

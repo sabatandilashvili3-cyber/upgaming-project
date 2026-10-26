@@ -109,7 +109,7 @@ python -m engine.store.bulk --local             # bundled Postgres + pgvector (p
 cp .env.example .env                            # add ANTHROPIC_API_KEY
 DATABASE_URL=$(python -c "from engine.store.bulk import local_url; print(local_url())") \
   uvicorn engine.api.app:app --port 8765        # open http://localhost:8765
-python -m pytest -q                             # 60 tests
+python -m pytest -q                             # 81 tests
 python -m eval.retrieval --hotpot 500           # retrieval eval, no LLM
 python -m eval.answers --hotpot 40              # answer eval, costs money, asks first
 ```
