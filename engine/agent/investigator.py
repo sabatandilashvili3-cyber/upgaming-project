@@ -53,6 +53,15 @@ is missing. "Not established by the documents" is a correct answer; a guess is n
 Finish by calling submit_report exactly once."""
 
 
+def cache_key(question: str, model: str, effort: str, corpus_version: str) -> str:
+    """Same question + same model settings + same prompt and tools + same documents = same report.
+    The corpus version changes on every upload/delete, so a cached answer never outlives its evidence."""
+    import hashlib, json
+    norm = " ".join(question.lower().split())
+    prompt = hashlib.sha256((SYSTEM + json.dumps([t.schema for t in TOOLS], sort_keys=True)).encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps([norm, model, effort, prompt, corpus_version]).encode()).hexdigest()
+
+
 @dataclass
 class Investigation:
     trace_id: str

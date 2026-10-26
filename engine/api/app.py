@@ -29,7 +29,7 @@ from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..agent.investigator import Investigator
+from ..agent.investigator import Investigator, cache_key
 from ..ingest.loaders import UnsupportedFormat
 from ..llm.base import LLMError
 from ..search.retriever import SearchConfig
@@ -181,6 +181,15 @@ def investigate(body: AskIn, request: Request):
     if spent_today(eng.store) >= DAILY_BUDGET_USD:
         raise HTTPException(429, f"Today's LLM budget (${DAILY_BUDGET_USD}) is used up; try tomorrow.")
 
+    llm = state["llm"]
+    key = cache_key(body.question, llm.model, llm.effort, eng.store.corpus_version())
+    cached = eng.store.cache_get(key)
+    if cached:
+        # identical question, same documents: answer instantly and for free
+        def replay():
+            yield f"event: report\ndata: {json.dumps({**cached, 'cached': True, 'cost_usd': 0.0, 'latency_ms': 0})}\n\n"
+        return StreamingResponse(replay(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
     events: queue.Queue = queue.Queue()
 
     def work():
@@ -192,10 +201,14 @@ def investigate(body: AskIn, request: Request):
                                            + inv.usage.cache_write_tokens,
                               "tokens_out": inv.usage.output_tokens, "cost_usd": inv.cost_usd,
                               "latency_ms": inv.latency_ms, "error": inv.error})
-        events.put(("report", {"trace_id": inv.trace_id, "langfuse_trace_id": inv.lf_trace_id,
-                               "status": inv.status, "error": inv.error,
-                               "report": inv.report, "cost_usd": inv.cost_usd, "latency_ms": inv.latency_ms,
-                               "usage": inv.usage.__dict__}))
+        payload = {"trace_id": inv.trace_id, "langfuse_trace_id": inv.lf_trace_id,
+                   "status": inv.status, "error": inv.error,
+                   "report": inv.report, "cost_usd": inv.cost_usd, "latency_ms": inv.latency_ms,
+                   "usage": inv.usage.__dict__}
+        if inv.status in ("answered", "abstained"):          # never cache an error
+            eng.store.cache_put(key, jsonable({**payload, "original_cost_usd": inv.cost_usd,
+                                               "original_latency_ms": inv.latency_ms}))
+        events.put(("report", payload))
         events.put(None)
 
     threading.Thread(target=work, daemon=True).start()

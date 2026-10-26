@@ -120,3 +120,14 @@ def test_bulk_copy_stores_metadata_as_an_object(store, ingestor):
                          {"ids": ["CHG-1"], "dates": []}, FakeEmbedder().query("text"))])
     row = store.chunks_by_id(["changes.csv#CHG-1::9"])["changes.csv#CHG-1::9"]
     assert isinstance(row["meta"], dict) and row["meta"]["ids"] == ["CHG-1"]
+
+
+def test_answer_cache_is_invalidated_by_any_document_change(ingestor, store):
+    from engine.agent.investigator import cache_key
+    ingestor.ingest_file("changes.csv", CSV_V1)
+    k1 = cache_key("How long did INC-1 last?", "m", "high", store.corpus_version())
+    store.cache_put(k1, {"status": "answered", "report": {"summary": "x"}})
+    assert store.cache_get(k1)["status"] == "answered"
+    assert cache_key("  how long did INC-1   last? ", "m", "high", store.corpus_version()) == k1   # same question
+    ingestor.ingest_file("changes.csv", CSV_V2)                                                    # documents changed
+    assert cache_key("How long did INC-1 last?", "m", "high", store.corpus_version()) != k1

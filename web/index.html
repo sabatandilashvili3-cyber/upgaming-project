@@ -39,6 +39,7 @@ textarea { min-height: 72px; resize: vertical; }
 .btn.ghost { background: transparent; color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
 .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; margin: 2px 4px 2px 0; font-family: ui-monospace, monospace; }
+.chip.added { background: transparent; border: 1px dashed var(--accent); }
 .example { text-align: left; background: var(--code); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
 .status { display: inline-block; font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 6px; }
 .status.answered { background: var(--ok-soft); color: var(--ok); }
@@ -192,12 +193,13 @@ $("#ask").onclick = async () => {
 };
 
 function chips(cites) {
-  return (cites || []).map(c => { evidenceIndex[c.evidence_id] = c; return `<button class="chip" data-ev="${esc(c.evidence_id)}" title="${esc(c.doc_id)}">${esc(c.evidence_id)}</button>`; }).join("");
+  return (cites || []).map(c => { evidenceIndex[c.evidence_id] = c; return `<button class="chip${c.added_by_verifier ? " added" : ""}" data-ev="${esc(c.evidence_id)}" title="${esc(c.doc_id)}${c.added_by_verifier ? " (citation added by the verifier: the fact is in this passage, which the model read but did not cite)" : ""}">${esc(c.evidence_id)}${c.added_by_verifier ? " +" : ""}</button>`; }).join("");
 }
 
 function renderReport(d) {
   const r = d.report || {}; evidenceIndex = {};
   let h = `<div class="card"><span class="status ${esc(d.status)}">${esc(d.status)}</span>
+    ${d.cached ? `<span class="muted small"> · answered from cache (same question, documents unchanged; first run took ${((d.original_latency_ms || 0) / 1000).toFixed(1)} s and cost $${(d.original_cost_usd || 0).toFixed(4)})</span>` : ""}
     <span class="muted small"> · ${(d.latency_ms / 1000).toFixed(1)} s · $${(d.cost_usd || 0).toFixed(4)} · ${d.usage ? (d.usage.input_tokens + d.usage.cache_read_tokens) + " in / " + d.usage.output_tokens + " out tokens (" + d.usage.cache_read_tokens + " from cache)" : ""}</span>`;
   if (d.error) h += `<p class="err">${esc(d.error)}</p>`;
   if (r.summary) h += `<p>${esc(r.summary)}</p>`;
@@ -206,6 +208,7 @@ function renderReport(d) {
   if (r.timeline?.length) h += `<h3>Timeline</h3><ul class="findings">${r.timeline.map(t => `<li><b>${esc(t.time)}</b> ${esc(t.event)} ${chips(t.citations)}</li>`).join("")}</ul>`;
   if (r.unknowns?.length) h += `<h3>Not established by the documents</h3><ul class="findings">${r.unknowns.map(u => `<li>${esc(u)}</li>`).join("")}</ul>`;
   if (r.unsupported?.length) h += `<h3>Dropped by the verifier</h3><ul class="findings dropped">${r.unsupported.map(u => `<li>${esc(u.text)} <span class="small">(${esc(u.reason)}${u.missing?.length ? ": " + esc(u.missing.join(", ")) : ""})</span></li>`).join("")}</ul>`;
+  if (JSON.stringify(r).includes('"added_by_verifier":true')) h += `<p class="muted small">A dashed chip marked + is a citation the verifier added: the fact is in that passage, which the model read but did not cite.</p>`;
   if (r.sources?.length) h += `<h3>Sources</h3><div class="small">${r.sources.map(esc).join("<br>")}</div>`;
   h += `<p class="muted small">trace ${esc(d.trace_id)}</p></div>`;
   $("#report").innerHTML = h;

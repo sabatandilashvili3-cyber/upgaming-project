@@ -163,12 +163,21 @@ class Store:
         with self.pool.connection() as c:
             return c.execute("select * from traces where trace_id = %s", (trace_id,)).fetchone()
 
-    def cache_get(self, key: str):
+    def corpus_version(self) -> str:
+        """Changes whenever any document is added, updated or deleted (count + latest update + chunk count)."""
         with self.pool.connection() as c:
-            row = c.execute("select response from llm_cache where key = %s", (key,)).fetchone()
+            r = c.execute("select count(*) as n, max(updated_at) as t, (select count(*) from chunks) as k "
+                          "from documents").fetchone()
+        return f"{r['n']}:{r['k']}:{r['t'].isoformat() if r['t'] else ''}"
+
+    def cache_get(self, key: str, max_age_days: int = 7):
+        with self.pool.connection() as c:
+            row = c.execute("select response from llm_cache where key = %s and created_at > now() - make_interval(days => %s)",
+                            (key, max_age_days)).fetchone()
         return row["response"] if row else None
 
     def cache_put(self, key: str, response: dict):
         with self.pool.connection() as c:
-            c.execute("insert into llm_cache (key, response) values (%s, %s) on conflict (key) do nothing",
-                      (key, json.dumps(response)))
+            c.execute("insert into llm_cache (key, response) values (%s, %s) "
+                      "on conflict (key) do update set response = excluded.response, created_at = now()",
+                      (key, json.dumps(response, default=str)))
