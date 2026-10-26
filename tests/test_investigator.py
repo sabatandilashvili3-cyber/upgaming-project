@@ -191,3 +191,18 @@ def test_list_incidents_is_complete_and_flags_status_only_matches():
     assert "INC-4 | 2026-05-01 | SEV1" in out and "POSSIBLE" in out.split("INC-4")[0]   # INC-2 via its status page
     assert "INC-3 |" not in out                                        # SEV2
     assert "Affected services: bank-connector, payout-service" in out  # the evidence passage itself is shown
+
+
+def test_list_incidents_reads_free_form_fields():
+    """Fields written the way people write them, not this corpus's template."""
+    from engine.agent.tools import Toolbox
+    docs = [("postmortems/INC-9_postmortem.md", "Postmortem for INC-9. This was a Sev-1 incident that began at "
+             "2026-07-02 08:00 UTC. Impacted systems: Ledger and payout-service. The root cause was CHG-77."),
+            ("incidents/INC-8_report.pdf", "INC-8 report. severity 2. Detected 2026-07-01 09:00 UTC. "
+             "Services affected: payout-service")]
+    chunks = CHUNKS + [Chunk(d + "::0", d, t, {}) for d, t in docs]
+    emb = FakeEmbedder()
+    box = Toolbox(Retriever(chunks, emb.passages([c.text for c in chunks]), emb))
+    out, _ = box.run("list_incidents", {"severity": "sev 1", "service": "payout-service", "start": "2026-07-01", "end": ""})
+    assert out.startswith("1 of") and "INC-9 | 2026-07-02 | SEV1 | services named: ledger, payout-service" in out
+    assert "The root cause was CHG-77" in out

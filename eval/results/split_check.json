@@ -1,0 +1,27 @@
+{
+ "questions": 539,
+ "splits": 1000,
+ "full_set_score": {
+  "H-routed": 0.831,
+  "H-routed-15": 0.828,
+  "G": 0.82,
+  "E": 0.795,
+  "F": 0.795,
+  "H-fused": 0.778,
+  "G-minilm": 0.762,
+  "B": 0.699,
+  "H": 0.657,
+  "D": 0.614,
+  "C": 0.586,
+  "A": 0.511
+ },
+ "chosen_on_dev": {
+  "H-routed": 908,
+  "H-routed-15": 75,
+  "F": 10,
+  "E": 7
+ },
+ "dev_minus_test_mean": 0.0,
+ "dev_minus_test_p95": 0.0732,
+ "test_loss_vs_best_on_test_mean": 0.0017
+}

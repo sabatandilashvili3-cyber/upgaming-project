@@ -7,9 +7,15 @@ the question and one passage TOGETHER and outputs a relevance score, so it can s
 together. It is far too slow for 63k passages, so it only re-orders the top N (30) that
 hybrid search already found: cheap recall first, expensive precision second.
 
-Model: cross-encoder/ms-marco-MiniLM-L-6-v2 (trained on Bing search queries, 22M params, CPU-friendly).
+Model: cross-encoder/ms-marco-MiniLM-L-4-v2 (trained on Bing search queries, CPU-friendly). The
+re-ranker is ~93% of a re-ranked search's time on the 4-core ARM server, so the model size is the
+throughput lever. Measured on all 539 retrieval questions (eval/retrieval.py, H-routed-15):
+  L-6: 345 ms per re-rank, recall@10 0.872, MRR 0.915
+  L-4: 233 ms,             recall@10 0.871, MRR 0.911   <- 1.5x faster for 0.001 recall
+  L-2: 120 ms,             recall@10 0.862, MRR 0.902
+int8 dynamic quantisation was tried and was slower on ARM (qnnpack): 569 ms vs 347 ms.
 """
-DEFAULT_RERANKER = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+DEFAULT_RERANKER = "cross-encoder/ms-marco-MiniLM-L-4-v2"
 
 
 class Reranker:

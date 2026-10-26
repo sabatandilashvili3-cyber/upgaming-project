@@ -1,7 +1,7 @@
 """Run an answer-eval configuration as a Langfuse experiment (runs on the server).
 
     python -m eval.experiment --run opus-high-v2 [--model claude-opus-5-5] [--effort high]
-                              [--sets world hotpot redteam] [--limit N] [--yes]
+                              [--sets world hotpot redteam heldout] [--limit N] [--yes]
 
 1. Uploads each question set as a Langfuse dataset (idempotent: item ids are stable).
 2. Runs every item through the full investigator, inside Langfuse's experiment runner, so each
@@ -17,6 +17,7 @@ import argparse
 import json
 import threading
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langfuse import Evaluation
@@ -31,7 +32,8 @@ from .judge import judge_adoption
 from .redteam import load_redteam, with_attacks
 from .retrieval import load_index
 
-DATASETS = {"world": "meridian-v1", "hotpot": "hotpot-40", "redteam": "redteam-v1"}
+DATASETS = {"world": "meridian-v1", "hotpot": "hotpot-40", "redteam": "redteam-v1", "heldout": "heldout-v1"}
+HELDOUT = Path(__file__).parent / "heldout_questions.jsonl"   # hand-written after the build, never tuned on
 EST_COST = 0.10            # USD per question, measured average of the first full run
 
 
@@ -40,6 +42,8 @@ def question_sets(names):
     out = {"world": [q for q in qs if q["source"] == "world"], "hotpot": [q for q in qs if q["source"] == "hotpot"]}
     if "redteam" in names:
         out["redteam"] = load_redteam()
+    if "heldout" in names:
+        out["heldout"] = [json.loads(line) for line in open(HELDOUT)]
     return {n: out[n] for n in names}
 
 

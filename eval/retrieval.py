@@ -55,9 +55,18 @@ CONFIGS = {
     "H-routed-15": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=15, rerank_mode="fuse",
                                                rerank_when="plain")),
     "G-minilm": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2)),
+    # smaller cross-encoders of the same family: the re-ranker is ~93% of a re-ranked search's time
+    "H-routed-15-L4": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=15,
+                                                  rerank_mode="fuse", rerank_when="plain")),
+    "H-routed-15-L2": ("structural", SearchConfig(mode="hybrid", boost=True, per_file=2, rerank_top=15,
+                                                  rerank_mode="fuse", rerank_when="plain")),
 }
 MODEL_OF = {"G-minilm": "sentence-transformers/all-MiniLM-L6-v2"}
-CHAINED = {"F", "G", "H", "H-fused", "H-routed", "H-routed-15", "G-minilm"}
+L6 = "cross-encoder/ms-marco-MiniLM-L-6-v2"           # the H configs were measured with it; pinned so they reproduce
+RERANKER_OF = {"H": L6, "H-fused": L6, "H-routed": L6, "H-routed-15": L6,
+               "H-routed-15-L4": "cross-encoder/ms-marco-MiniLM-L-4-v2",      # the live default
+               "H-routed-15-L2": "cross-encoder/ms-marco-MiniLM-L-2-v2"}
+CHAINED = {"F", "G", "H", "H-fused", "H-routed", "H-routed-15", "G-minilm", "H-routed-15-L4", "H-routed-15-L2"}
 
 
 def load_questions(n_hotpot, seed=13):
@@ -85,7 +94,7 @@ def load_index(strategy, model):
 def evaluate(configs, n_hotpot, model=DEFAULT_MODEL, k_values=(5, 10)):
     questions = load_questions(n_hotpot)
     embedders, qvecs, retrievers, report, rows = {}, {}, {}, {}, []
-    reranker = None
+    rerankers = {}
     for name in configs:
         strategy, cfg = CONFIGS[name]
         m = MODEL_OF.get(name, model)
@@ -93,13 +102,16 @@ def evaluate(configs, n_hotpot, model=DEFAULT_MODEL, k_values=(5, 10)):
             embedders[m] = Embedder(m)
             qvecs[m] = embedders[m].passages([embedder_prefix(embedders[m]) + q["question"] for q in questions],
                                              batch_size=64)
-        if cfg.rerank_top and reranker is None:
-            from engine.search.rerank import Reranker
-            reranker = Reranker()
-        key = (strategy, m, bool(cfg.rerank_top))
+        rr_name = None
+        if cfg.rerank_top:
+            from engine.search.rerank import DEFAULT_RERANKER, Reranker
+            rr_name = RERANKER_OF.get(name, DEFAULT_RERANKER)
+            if rr_name not in rerankers:
+                rerankers[rr_name] = Reranker(rr_name)
+        key = (strategy, m, rr_name)
         if key not in retrievers:
             chunks, vecs, aliases = load_index(strategy, m)
-            retrievers[key] = (Retriever(chunks, vecs, embedders[m], reranker if cfg.rerank_top else None), aliases)
+            retrievers[key] = (Retriever(chunks, vecs, embedders[m], rerankers.get(rr_name)), aliases)
         retriever, aliases = retrievers[key]
         cfg.k = max(k_values) * 3                       # chunks; several chunks may share a document
         per_group = defaultdict(lambda: defaultdict(list))
@@ -150,7 +162,11 @@ if __name__ == "__main__":
     report, rows = evaluate(a.configs, a.hotpot)
     print_table(report)
     RESULTS.mkdir(parents=True, exist_ok=True)
-    (RESULTS / "retrieval_summary.json").write_text(json.dumps(report, indent=1))
-    with open(RESULTS / "retrieval_rows.jsonl", "w") as f:
-        for r in rows:
+    # merge: running some configs replaces only those configs' results
+    summary_path, rows_path = RESULTS / "retrieval_summary.json", RESULTS / "retrieval_rows.jsonl"
+    old = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    summary_path.write_text(json.dumps({**old, **report}, indent=1))
+    kept = [r for r in map(json.loads, open(rows_path))] if rows_path.exists() else []
+    with open(rows_path, "w") as f:
+        for r in [r for r in kept if r["config"] not in report] + rows:
             f.write(json.dumps(r) + "\n")

@@ -30,10 +30,20 @@ class ToolError(Exception):
 MAX_TIMELINE = 25
 MAX_INCIDENTS = 15
 
+# which folders hold incident documents: domain configuration, like AUTHORITY in claims.py
 INC_DOC_RE = re.compile(r"^(incidents|postmortems|status)/.*?(INC-\d+(?:-\d+)*)")
-SERVICES_RE = re.compile(r"(?:Services showing errors[^:]*|Affected services): ([a-z0-9-]+(?:, [a-z0-9-]+)*)")
-SEV_RE = re.compile(r"[Ss]everity:? (SEV\d)")
-START_RE = re.compile(r"(?:Detected:|Between|Started) (\d{4}-\d\d-\d\d)")
+# the field patterns accept the common ways people write them, not only this corpus's template:
+# "Severity: SEV1", "Sev-1", "severity 2"; "Affected services:", "Impacted systems:", "Services affected:"
+SERVICES_RE = re.compile(r"(?i)(?:services? showing errors[^:\n]*|(?:affected|impacted) (?:services|systems|components)"
+                         r"|services? (?:affected|impacted)):\s*([a-z0-9][\w-]*(?:\s*(?:,|\band\b)\s*[a-z0-9][\w-]*)*)")
+SEV_RE = re.compile(r"(?i)\bsev(?:erity)?(?: level)?\s*[:=]?\s*(?:sev)?[-\s]?(\d)\b")
+START_RE = re.compile(r"(?i)\b(?:detected|between|started|start time|began)\s*:?\s*(?:at\s*)?(\d{4}-\d\d-\d\d)")
+
+
+def norm_severity(s: str) -> str:
+    """"SEV1", "sev-1", "Severity 1" -> "SEV1"; anything without a digit stays as written."""
+    d = re.search(r"\d", s)
+    return f"SEV{d.group()}" if d else s.upper()
 
 
 def _obj(props: dict) -> dict:
@@ -104,16 +114,19 @@ def incident_index(chunks) -> dict:
         kind, inc = m.groups()
         row = idx.setdefault(inc, {"severity": set(), "date": None, "services": set(), "status": "",
                                    "postmortem": False, "chunks": []})
-        row["severity"].update(SEV_RE.findall(c.text))
-        for found in SERVICES_RE.findall(c.text):
-            row["services"].update(found.split(", "))
+        sev = {f"SEV{d}" for d in SEV_RE.findall(c.text)}
+        services = {x.strip().lower() for found in SERVICES_RE.findall(c.text)
+                    for x in re.split(r",|\band\b", found) if x.strip()}
+        row["severity"] |= sev
+        row["services"] |= services
         if (d := START_RE.search(c.text)) and (row["date"] is None or d.group(1) < row["date"]):
             row["date"] = d.group(1)
         if kind == "status":
             row["status"] += " " + c.text.lower()
         row["postmortem"] |= kind == "postmortems"
-        # the passages that carry the row's facts; postmortem summary, timeline and actions add nothing
-        if kind != "postmortems" or "> Impact]" in c.text or "> Root cause]" in c.text:
+        # the passages that carry the row's facts (and the cause, which the question usually wants next);
+        # a postmortem's summary and action items add nothing
+        if kind != "postmortems" or sev or services or "cause" in c.text.lower():
             row["chunks"].append(c)
     return idx
 
@@ -203,7 +216,7 @@ class Toolbox:
         idx = incident_index(self.retriever.chunks.values())
         rows = []
         for inc, r in sorted(idx.items()):
-            if severity and severity.upper() not in r["severity"]:
+            if severity and norm_severity(severity) not in r["severity"]:
                 continue
             if (start and (r["date"] or "") < start) or (end and (r["date"] or "9999") > end):
                 continue
