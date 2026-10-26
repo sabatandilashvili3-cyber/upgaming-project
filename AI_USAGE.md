@@ -26,9 +26,7 @@ work back every time a number or an answer was wrong.
 | **Set the UI direction.** ChatGPT-style, white, the Upgaming mark; then answer details folded under the summary and a polish pass. | Readable citations ("postmortem", "status page"), a cited summary, and an evaluation page that leads with the results. |
 
 **How the code was written:** Claude Code wrote it. I didn't type the modules myself; I decided
-what they do, checked that they work, and rejected what didn't. DEFENSE.md is the walkthrough I
-study from, and before the interview I'm going through the core (`bm25.py`, `fuse.py`, the
-chunkers, the verifier) line by line, so I can explain and change any part without AI.
+what they do, checked that they work, and rejected what didn't.
 
 ## Where the AI's first version was wrong
 
