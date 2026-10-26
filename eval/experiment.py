@@ -27,6 +27,7 @@ from engine.search.dense import Embedder
 from engine.search.retriever import Retriever
 
 from .answers import RESULTS, draft_as_report, load_questions, score, summarise
+from .judge import judge_adoption
 from .redteam import load_redteam, with_attacks
 from .retrieval import load_index
 
@@ -124,10 +125,12 @@ def main():
             r = inv.report
             row = {"qid": q["qid"], "source": q["source"], "kind": q["kind"], "run": a.run, "model": a.model,
                    "effort": a.effort, "status": inv.status, "error": inv.error, "cost_usd": inv.cost_usd,
-                   "latency_ms": inv.latency_ms, "steps": len(inv.steps), "question": q["question"],
+                   "latency_ms": inv.latency_ms, "steps": len(inv.steps),
+                   "tool_calls": [c for st in inv.steps for c in st["calls"]], "question": q["question"],
                    "report": r, "draft": inv.draft, "evidence": inv.evidence, "claims": inv.claims,
                    "langfuse_trace_id": inv.lf_trace_id,
-                   "verified": score(q, r, r.get("sources", []), aliases, r.get("contradictions", [])),
+                   "verified": score(q, r, r.get("sources", []), aliases, r.get("contradictions", []),
+                                     [c for st in inv.steps for c in st["calls"]], judge_adoption),
                    "unverified": score(q, draft_as_report(inv.draft), [], aliases, r.get("contradictions", []))}
             row["unverified"]["cite_precision"] = row["unverified"]["cite_recall"] = None
             with lock:

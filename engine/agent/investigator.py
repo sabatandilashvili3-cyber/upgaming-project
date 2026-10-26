@@ -22,7 +22,7 @@ from .. import observability as obs
 from ..llm.base import LLMError, ToolResult, Usage
 from .claims import Claim, find_contradictions
 from .tools import TOOLS, Toolbox
-from .verify import check, find_support, hard_facts, split_sentences
+from .verify import check, find_supports, hard_facts, split_sentences
 
 MAX_STEPS = 10
 
@@ -200,9 +200,9 @@ def verify_report(question, submitted, book: dict, claims: list) -> dict:
         if v.supported:
             return cite(citations), None
         if v.reason == "facts not found in the cited sources":
-            extra = find_support(v.missing, evidence, exclude=set(citations))
+            extra = find_supports(v.missing, evidence, exclude=set(citations), max_extra=2)
             if extra:
-                return cite([*citations, extra], repaired={extra}), None
+                return cite([*citations, *extra], repaired=set(extra)), None
         return None, {"text": text, "reason": v.reason, "missing": v.missing}
 
     findings = []

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 FACT_PATTERNS = [
     r"\b[A-Z]{2,5}(?:-\d{2,5})+\b",                            # ids
     r"\bv\d+(?:\.\d+)+\b|\b\d+\.\d+\.\d+\b",                    # versions, kept whole: v1.9.19 is one fact
-    r"\b20\d\d-\d\d-\d\d\b",                                   # dates
+    r"\b(?:1[5-9]|20)\d\d-\d\d-\d\d\b",                         # ISO dates, any year from 1500
     r"\b\d{1,2}:\d\d\b",                                       # clock times
     r"\b\d+(?:\.\d+)?\s*%",                                    # percentages
     r"\b\d+(?:\.\d+)?\s*(?:minutes?|mins?|hours?|ms|s)\b",     # quantities with units
@@ -32,8 +32,34 @@ def hard_facts(sentence: str):
 
 
 def _squash(s: str) -> str:
-    """Lower-case, drop spaces and thousands separators: "40,000 GEL" matches "40000 gel"."""
-    return re.sub(r"(?<=\d),(?=\d{3})", "", re.sub(r"\s+", "", s.lower()))
+    """Lower-case, drop thousands separators, then spaces: "40,000 GEL" matches "40000 gel".
+
+    Order and exactness matter (both found on HotpotQA): a separator is a comma followed by
+    EXACTLY three digits, and it is removed while spaces still exist. Otherwise "November 11,
+    1914" became "111914" and "May 8, 2007, 500 locations" became "2007500", and correct
+    sentences quoting dates were rejected.
+    """
+    s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s.lower())
+    return re.sub(r"\s+", "", s)
+
+
+MONTHS = {m: i for i, m in enumerate("january february march april may june july august september october "
+                                     "november december".split(), start=1)}
+_MONTH = "|".join(MONTHS)
+
+
+def iso_dates(text: str) -> str:
+    """ISO forms of the natural-language dates in a text: "July 26, 2006" / "26 July 2006" -> 2006-07-26.
+    Appended to the evidence, so a timeline line that writes the same date as 2006-07-26 matches."""
+    out = []
+    for m in re.finditer(rf"\b({_MONTH})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}})\b", text, re.I):
+        out.append(f"{m[3]}-{MONTHS[m[1].lower()]:02d}-{int(m[2]):02d}")
+    for m in re.finditer(rf"\b(\d{{1,2}})\s+({_MONTH})\s+(\d{{4}})\b", text, re.I):
+        out.append(f"{m[3]}-{MONTHS[m[2].lower()]:02d}-{int(m[1]):02d}")
+    return " ".join(out)
+
+
+UNIT_ALIASES = {"ms": ("ms", "millisecond"), "s": ("seconds", "_s ", " s "), "mins": ("min",), "min": ("min",)}
 
 
 def _present(fact: str, corpus: str) -> bool:
@@ -63,11 +89,24 @@ def check(sentence: str, cited_ids, evidence: dict, given: str = "") -> Verdict:
     unknown = [c for c in cited_ids if c not in evidence]
     if unknown:
         return Verdict(False, "cites a source that was never retrieved", unknown)
-    corpus = _squash(" ".join(evidence[c] for c in cited_ids) + " " + given)
-    missing = [f for f in hard_facts(sentence) if not _present(_squash(f), corpus)]
+    raw = " ".join(evidence[c] for c in cited_ids) + " " + given
+    corpus = _squash(raw + " " + iso_dates(raw))
+    missing = [f for f in hard_facts(sentence) if not _present(_squash(f), corpus) and not _unit_ok(f, raw)]
     if missing:
         return Verdict(False, "facts not found in the cited sources", missing)
     return Verdict(True)
+
+
+def _unit_ok(fact: str, raw: str) -> bool:
+    """"5000 ms" is supported by an alert reading "metric: p99_latency_ms, value: 5000": the number is
+    there and so is the unit. Only for ms/s, where sources store the unit in the field name; durations
+    in minutes/hours must still match as written."""
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(ms|s)", fact.strip().lower())
+    if not m:
+        return False
+    num, unit = m[1], m[2]
+    low = raw.lower()
+    return bool(re.search(rf"(?<![\d.]){re.escape(num)}(?![\d])", low)) and any(a in low for a in UNIT_ALIASES[unit])
 
 
 def find_support(missing, evidence: dict, exclude=()):
@@ -77,11 +116,25 @@ def find_support(missing, evidence: dict, exclude=()):
     page is grounded, the model just forgot to cite the postmortem it read. The repaired
     citation is labelled, so the report shows it was added by the verifier.
     """
-    wanted = [_squash(m) for m in missing]
-    for eid, text in evidence.items():
-        if eid not in exclude and all(_present(w, _squash(text)) for w in wanted):
-            return eid
-    return None
+    found = find_supports(missing, evidence, exclude, max_extra=1)
+    return found[0] if found else None
+
+
+def find_supports(missing, evidence: dict, exclude=(), max_extra: int = 2):
+    """Smallest set (<= max_extra) of passages the model read that together contain every missing
+    fact, chosen greedily; [] if they cannot all be covered. A sentence naming two incidents can
+    draw on two passages."""
+    def has(text, fact):
+        return _present(_squash(fact), _squash(text + " " + iso_dates(text))) or _unit_ok(fact, text)
+    left, chosen = list(missing), []
+    while left and len(chosen) < max_extra:
+        best = max(((eid, [f for f in left if has(t, f)]) for eid, t in evidence.items()
+                    if eid not in exclude and eid not in chosen), key=lambda x: len(x[1]), default=(None, []))
+        if not best[1]:
+            break
+        chosen.append(best[0])
+        left = [f for f in left if f not in best[1]]
+    return chosen if not left else []
 
 
 def split_sentences(text: str):

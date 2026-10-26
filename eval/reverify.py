@@ -10,20 +10,31 @@ Usage: python -m eval.reverify eval/results/answers_rows_<tag>.jsonl [--as <new 
 """
 import argparse
 import json
+
+from dotenv import load_dotenv
 from pathlib import Path
 
 from engine.agent.investigator import verify_report
 
 from .answers import RESULTS, draft_as_report, load_questions, score, summarise
+from .judge import judge_adoption
+from .redteam import load_redteam
 from .retrieval import load_index
 
 
 def main():
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     ap = argparse.ArgumentParser()
     ap.add_argument("rows")
     ap.add_argument("--as", dest="tag", default=None)
+    ap.add_argument("--judge", action="store_true", help="LLM adoption judge for injection rows (~$0.001 each)")
+    ap.add_argument("--tool-calls", default=None, help="json {run|qid: [tool calls]} fetched from Langfuse")
+    ap.add_argument("--run", default=None, help="run name used as key prefix in --tool-calls")
     a = ap.parse_args()
     truth = {q["qid"]: q for q in load_questions(n_hotpot=6000)}       # every question we could have asked
+    truth.update({q["qid"]: q for q in load_redteam()})
+    judge = judge_adoption if a.judge else None
+    calls = json.load(open(a.tool_calls)) if a.tool_calls else {}
     _, _, aliases = load_index("structural", "BAAI/bge-small-en-v1.5")
     out, rebuilt = [], 0
     for row in map(json.loads, open(a.rows)):
@@ -33,7 +44,9 @@ def main():
             r = verify_report(q["question"], row["draft"], row["evidence"], row.get("claims", []))
             rebuilt += 1
         row["report"] = r
-        row["verified"] = score(q, r, r.get("sources", []), aliases, r.get("contradictions", []))
+        tc = row.get("tool_calls") or calls.get(f"{a.run}|{row['qid']}")
+        row["tool_calls"] = tc
+        row["verified"] = score(q, r, r.get("sources", []), aliases, r.get("contradictions", []), tc, judge)
         row["unverified"] = score(q, draft_as_report(row.get("draft")), [], aliases, r.get("contradictions", []))
         row["unverified"]["cite_precision"] = row["unverified"]["cite_recall"] = None
         out.append(row)

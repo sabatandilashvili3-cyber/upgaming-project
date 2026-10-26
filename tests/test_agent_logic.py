@@ -102,3 +102,36 @@ def test_split_sentences_keeps_versions_and_decimals():
     from engine.agent.verify import split_sentences
     assert split_sentences("It ran v1.9.19 for 2.4 s. Then it failed. (Twice.)") == \
         ["It ran v1.9.19 for 2.4 s.", "Then it failed.", "(Twice.)"]
+
+
+
+def test_dates_with_commas_are_not_thousands_separators():
+    # found on HotpotQA: both sentences quote their source exactly and were rejected
+    ev = {"c1": "Howard Melvin Fast (November 11, 1914 – March 12, 2003) was an American novelist."}
+    assert check("Howard Fast (November 11, 1914 – March 12, 2003) was a novelist.", ["c1"], ev).supported
+    ev = {"c2": "As of May 8, 2007, 500 locations in 47 states are in operation."}
+    assert check("On May 8, 2007 there were 500 locations.", ["c2"], ev).supported
+    assert check("Loss: 40,000 GEL.", ["c3"], {"c3": "estimated loss 40000 GEL"}).supported
+    assert not check("It had 2007500 locations.", ["c2"], ev).supported
+
+
+
+def test_iso_date_matches_a_written_date():
+    ev = {"c1": "The 1st World Outgames were held in Montreal from July 26, 2006 to August 5, 2006."}
+    assert check("2006-07-26 World Outgames begin", ["c1"], ev).supported
+    assert not check("2006-07-27 World Outgames begin", ["c1"], ev).supported
+    assert check("1813-01-18 Joseph Glidden born", ["c2"], {"c2": "Glidden (January 18, 1813 - 1906)"}).supported
+
+
+def test_unit_in_field_name_supports_number_with_unit():
+    ev = {"c1": "metric: p99_latency_ms\nvalue: 5000"}
+    assert check("p99 latency hit 5000 ms", ["c1"], ev).supported
+    assert not check("p99 latency hit 7000 ms", ["c1"], ev).supported
+    assert not check("It lasted 5000 minutes", ["c1"], ev).supported       # durations stay exact
+
+
+def test_repair_can_combine_two_passages():
+    from engine.agent.verify import find_supports
+    ev = {"E1": "INC-2026-016 on 2026-03-14", "E2": "INC-2026-018 on 2026-03-20", "E3": "noise"}
+    assert sorted(find_supports(["INC-2026-016", "INC-2026-018"], ev)) == ["E1", "E2"]
+    assert find_supports(["INC-2026-016", "INC-2026-999"], ev) == []
