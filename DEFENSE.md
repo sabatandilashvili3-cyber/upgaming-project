@@ -515,10 +515,106 @@ Say these before they find them.
 
 ---
 
-## Not built yet (coming next)
-- the LLM tool loop (planner → search / read / timeline / record-claims → write → verify);
-- the FastAPI backend and web page;
-- the full answer eval;
-- deployment to Hugging Face Spaces + Neon.
+## 15. The investigation loop — `engine/agent/investigator.py`, `tools.py`
 
-This file is updated as each piece lands.
+**What happens when someone asks a question:**
+1. The model gets the question, the system prompt and **5 tools**:
+   - `search`: hybrid search (config G) with the automatic second hop;
+   - `read_document`: every passage of one document;
+   - `timeline`: dated records mentioning a term inside a window;
+   - `record_claims`: write facts into the claim ledger;
+   - `submit_report`: finish.
+2. **The loop:** call the model; if it asked for tools, run them and send all the results back
+   in one message; repeat. It stops at `submit_report`, or at **10 steps** at most.
+3. **Code finalises the report:**
+   - verify every finding, timeline line and the summary;
+   - compute contradictions from the ledger;
+   - mark the report *answered* only if the model said answerable **and** at least one finding
+     survived verification. Otherwise it's *abstained*, with the reasons.
+
+**Evidence aliases:** each passage shown to the model gets a short id (E1, E2…). The model cites
+E-ids; code maps them back to real chunk ids. A short id is hard to mistype or invent, and an
+E-id that was never shown is rejected by the verifier.
+
+**Prompt injection, three layers:**
+1. Retrieved text is wrapped in `<evidence>` tags and the system prompt says it's data, never
+   instructions.
+2. Every passage carries its source kind and authority, so a customer ticket is visibly a ticket.
+3. Even if the model repeats an injected claim, the contradiction logic ranks the ticket below
+   the postmortem, and the eval checks the answer doesn't contain the injected change id.
+
+**Why a manual loop instead of the SDK's tool runner:**
+- a hard step cap;
+- a per-step trace (shown in the UI, stored in `traces`);
+- token and cost accounting per question;
+- you can explain every line.
+
+**Failure handling — nothing crashes the request:**
+- **A failing tool** returns an error result to the model, and the model can try again.
+- **A text answer without `submit_report`** gets one reminder.
+- **An API failure** (auth, rate limit after the SDK's own retries, network) becomes an `error`
+  report with the reason.
+- **A safety refusal** is reported as such. Server-side fallback is on, so the API first retries
+  on a fallback model.
+
+**Cost control:**
+- **Prompt caching:** the system prompt and tool list never change, and each step only appends,
+  so later steps re-read the prefix at about a tenth of the price. The trace shows
+  `cache_read` tokens per step.
+- **On the API side:** an hourly limit per client, plus a daily budget enforced from the
+  `traces` table.
+
+**Provider seam (`engine/llm/base.py`):** the agent only knows `start / step / add_tool_results`.
+Claude is one adapter. The tests use a scripted fake, so the whole loop is tested with no key
+and no cost (`tests/test_investigator.py`).
+
+## 16. The API and the page — `engine/api/app.py`, `web/index.html`
+
+- **Startup:** the port opens immediately. The embedding model and the BM25 index load in a
+  background thread, and `/api/health` says "starting" until they're ready.
+- **Streaming:** investigations stream as server-sent events, so the page shows each step while
+  the model works, then the report.
+- **Uploads:** 10 MB cap; the client's path is stripped from the file name. A wrong format
+  returns 415; a corrupt file returns 422 with the reason. Uploads and deletes need the admin
+  token when one is set.
+- **The page is one static HTML file** with no framework: the brief prioritises working
+  functionality over visual design. Citation chips open the cited document.
+
+## 17. Bugs found by running it, not by reading it
+
+All of these are in the git history with the fix.
+
+| Bug | How it was found | Fix |
+|---|---|---|
+| Ticket ids cut short (`TCK-2026-03`) | a unit test | id regex allows any number of digit groups |
+| "the 2014-15 season" read as month 15, crashing the eval | the eval crashed on a HotpotQA question | validate month/day ranges; `YYYY-YY` with the next year is a season |
+| Bulk-loaded chunk metadata stored as a JSON *string* | the API's search returned 500 on real data | wrap in `Jsonb`. The test was first proven to fail on the old code |
+| Unknown document returned as a normal result | a loop test | `ToolError` → `is_error` |
+| Verifier let "40,000 GEL" through | my own UI sample report | every 2+ digit number is a checked fact |
+| Verifier let "24" pass because "240" was cited | reviewing the previous fix | numbers match whole |
+| Generated change log said "Scale up 200 → 66" | reading the generated documents | template fixed; ids and versions renumbered in date order |
+
+## 18. Hosting: why Oracle Cloud — `DEPLOYMENT.md`
+
+- **Hugging Face Spaces was the plan.** Its docs, checked before deploying, say:
+  - Docker Spaces now **require a paid plan**;
+  - a Space can only open outbound connections on **ports 80, 443 and 8080**, so it could never
+    reach Postgres on 5432.
+- **Render and Koyeb free tiers give 512 MB.** I **measured** the app at about 550 MB:
+  - chunks: 130 MB;
+  - BM25: 215 MB;
+  - PyTorch model: 130 MB.
+- **Oracle's Always Free ARM VM** has 24 GB and ordinary networking. Postgres runs on the same
+  machine.
+
+**If asked "how would you fit it in 512 MB?":**
+- store BM25 as flat arrays (CSR) instead of a dict of small arrays;
+- keep only ids and dates in memory and fetch chunk text from the database for the hits;
+- embed queries with ONNX Runtime instead of PyTorch.
+
+That's about 300 MB, then measure that retrieval quality is unchanged.
+
+## Still to do
+- run the answer evaluation with an API key and write EVALUATION.md from its numbers;
+- deploy to the VM;
+- the AI usage report.
