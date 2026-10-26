@@ -8,7 +8,7 @@ work back every time a number or an answer was wrong.
 ## Tools used
 | Tool | Used for |
 |---|---|
-| **Claude Code** (Anthropic's coding agent, Claude Opus 5.5) | writing the code, tests, documentation and deployment scripts; running the experiments; guiding me through the Oracle Cloud console |
+| **Claude Code** (Anthropic's coding agent, Claude Opus 5.5) | writing the code, tests, documentation and deployment scripts; running the experiments |
 | **Claude Opus 5.5 via the Anthropic API** | inside the product: the investigation agent |
 | **Langfuse** (my own self-hosted server) | tracing every investigation and running the evaluation experiments |
 
