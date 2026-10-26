@@ -614,7 +614,45 @@ All of these are in the git history with the fix.
 
 That's about 300 MB, then measure that retrieval quality is unchanged.
 
+## 19. Langfuse: observability and experiments — `engine/observability.py`, `eval/experiment.py`
+
+- **One investigation = one trace:**
+  - a span per Claude step (stop reason, tool calls);
+  - a tool span per call (input, the evidence returned);
+  - a `verify` span (kept and dropped sentences, contradictions);
+  - scores (status, findings kept, sentences dropped, contradictions, cost).
+- **Live traffic and evals stay separate:** live traffic is tagged `production`, eval runs `eval`.
+- **Bug found by measuring:** the Langfuse SDK already records every Anthropic call as a
+  generation. My own step was also a generation, so **Langfuse showed double the real cost**.
+  Steps became plain spans; checked afterwards: $0.0546 in Langfuse vs $0.0556 computed.
+- **Evals are Langfuse experiments.** Question sets are datasets with stable item ids, each
+  configuration is a run, and every metric is a score, so runs compare side by side.
+- **One item at a time:** the self-hosted Langfuse also serves HSAI and once ran out of heap on a
+  burst.
+- **Cloudflare gotcha:** Python's default `urllib` user-agent gets HTTP 403 "error 1010" from the
+  Cloudflare in front of Langfuse. A normal user-agent fixes it.
+
+## 20. What the evaluations changed (each is a story for the interview)
+
+| Finding | How it was found | What changed |
+|---|---|---|
+| The answer key was wrong for 2 questions (facts no document states) | reading the first failures | ground truth = what documents state; documents proven unchanged (indexed text identical for 6,973 records) |
+| The verifier dropped 55 correct sentences and 16 whole summaries | reading every dropped sentence | v2/v3: versions whole, the question's facts given, labelled citation repair, per-sentence summary, ISO dates, units in field names |
+| "November 11, 1914" became "111914" | a HotpotQA abstention with both gold paragraphs retrieved | thousands separator = a comma plus *exactly* 3 digits, removed before spaces |
+| Injection scoring punished models for reporting attacks | reading the 11 flagged answers | behaviour checks (real tool calls from Langfuse, leaks) + an LLM judge for "adopted vs reported" |
+| A web-trained re-ranker wrecked investigation retrieval (0.776 → 0.438) | the retrieval eval split by question set | fuse its order with ours, and use it only for questions with no ids or dates (best on every metric) |
+| Search took 1.5 s; deleting a file took 165 s | the load test on the server | re-rank 15 candidates × 256 tokens (0.7 s, no quality loss); index on `lsh_bands(doc_id)` (0.2 s) |
+
+**Model choice, with numbers:**
+- Opus 0.958 at 8.6¢; Sonnet 0.937 at 3.3¢; Haiku 0.895 at 0.25¢.
+- Opus is the only model that records claims from every source, so it's the only one that
+  reliably finds contradictions (0.78 vs 0.33 / 0.22). That's why it's the default.
+
+**Why an LLM judge only for injections:** everything else has an exact answer and is checked by
+code. "Did the report adopt the claim or report it?" is a question of meaning. The judge must
+quote its evidence, and it was checked against hand labels.
+
 ## Still to do
-- run the answer evaluation with an API key and write EVALUATION.md from its numbers;
-- deploy to the VM;
-- the AI usage report.
+- the short-answer prompt (the bare span, for HotpotQA EM/F1);
+- make claim recording mandatory for cheaper models;
+- push to GitHub and fill in the AI usage report's own sections.

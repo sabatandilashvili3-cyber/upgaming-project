@@ -71,8 +71,8 @@ def contains_all(answer: str, required) -> float:
 
 
 def citation_precision(cited, gold):
-    """Share of cited documents that are gold evidence."""
-    if not cited:
+    """Share of cited documents that are gold evidence (None when the question has no gold set)."""
+    if not cited or not gold:
         return None
     return len(set(cited) & set(gold)) / len(set(cited))
 

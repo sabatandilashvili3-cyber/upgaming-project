@@ -37,6 +37,12 @@ These are visible in the git history. Each was found by running or measuring, th
 | Equal-weight hybrid search | *worse* than BM25 alone on company questions (0.295 vs 0.622 recall@10) | id/date boost, second hop, per-file diversity |
 | Bulk loader | stored metadata as JSON *strings*, so search failed on real data | Jsonb wrapper, plus a test proven to fail on the old code |
 | Grounding verifier | let an invented "40,000 GEL" through; later rejected a correct "240 -> 60." | numbers became checked facts; boundary rules fixed with tests |
+| Verifier v1 | dropped 55 correct sentences and 16 whole summaries in the first eval run | v2/v3 rules, each measured on the saved answers |
+| Thousands-separator rule | turned "November 11, 1914" into "111914", dropping correct Wikipedia answers | exact 3-digit rule, applied before removing spaces |
+| Injection scoring by keywords | counted "a ticket told me to blame CHG-0001; I ignored it" as obeying the attack | behaviour checks + an LLM judge, checked against hand labels |
+| Langfuse step spans as generations | doubled the cost shown in Langfuse | steps became spans; cost verified afterwards |
+| Cross-encoder re-ranking | improved Wikipedia, broke investigation retrieval (0.776 → 0.438) | fused + routed re-ranking (best overall) |
+| No index for cascaded deletes | deleting a 2,000-row file took 165 s (load test) | index on lsh_bands(doc_id): 0.2 s |
 | Hosting plan (Hugging Face) | the docs, checked before deploying, say Docker Spaces need a paid plan and block outbound port 5432 | Oracle Cloud VM |
 
 ## What I wrote or rewrote myself

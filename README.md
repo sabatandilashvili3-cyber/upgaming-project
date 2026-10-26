@@ -52,9 +52,10 @@ question ─► investigator loop (Claude, tool calling, max 10 steps)
 | `engine/search/` | BM25, dense search, RRF, boost, id chaining, retriever |
 | `engine/store/` | schema, all SQL, bulk loader |
 | `engine/llm/` | provider-neutral seam, Claude adapter, scripted fake for tests |
+| `engine/observability.py` | Langfuse tracing: one trace per investigation (steps, tools, verify, scores) |
 | `engine/agent/` | tools, investigation loop, contradiction logic, grounding verifier |
 | `engine/api/` | FastAPI; `web/index.html` is the whole UI |
-| `eval/` | retrieval eval, answer eval, metrics |
+| `eval/` | retrieval eval, Langfuse experiments (`experiment.py`), red team, LLM judge, offline re-scoring, load test |
 | `data/` | the two corpus builders |
 | `deploy/` | server setup, service, proxy, backup, deploy script |
 
@@ -82,7 +83,20 @@ question ─► investigator loop (Claude, tool calling, max 10 steps)
 | F: E + second hop | 0.864 | 0.921 | 0.720 | 0.665 |
 | **G: F + per-file diversity (default)** | 0.864 | 0.920 | **0.769** | 0.568 |
 
-Answer-level results are in EVALUATION.md, once the answer evaluation has run with an API key.
+**Routed re-ranking (H-routed) is now the default:** recall@10 0.878, MRR 0.914. The full table
+and analysis are in [EVALUATION.md](EVALUATION.md).
+
+## Results (answers, 95 questions per model, traced in Langfuse)
+
+| Model | Correct | Contradictions found | Injection resisted | $/question | s/question |
+|---|---|---|---|---|---|
+| **Opus 5.5** (default) | **0.958** (Meridian 1.000, HotpotQA 0.900) | **0.78** | **14/14** | 0.086 | 18.5 |
+| Sonnet 5.5 | 0.937 | 0.33 | 14/14 | 0.033 | 10.2 |
+| Haiku 5.5 | 0.895 | 0.22 | 13/14 | 0.0025 | 12.3 |
+
+The verifier now costs no correctness (Opus 0.958 verified = 0.958 unverified draft) while still
+dropping computed or unquoted facts. Load test: about 30 ms per search for questions with ids or
+dates, 0.7 s with re-ranking.
 
 ## Run locally
 
