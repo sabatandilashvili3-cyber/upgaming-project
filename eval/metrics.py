@@ -66,7 +66,8 @@ def contains_all(answer: str, required) -> float:
     if not required:
         return None
     a = _norm(answer)
-    hit = lambda r: any(_norm(x) in a for x in r) if isinstance(r, list) else _norm(r) in a
+    def hit(r):
+        return any(_norm(x) in a for x in r) if isinstance(r, list) else _norm(r) in a
     return sum(1 for r in required if hit(r)) / len(required)
 
 

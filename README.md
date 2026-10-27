@@ -3,7 +3,7 @@
 [![tests](https://github.com/sabatandilashvili3-cyber/upgaming-project/actions/workflows/ci.yml/badge.svg)](https://github.com/sabatandilashvili3-cyber/upgaming-project/actions/workflows/ci.yml)
 
 **Live: https://130-61-72-51.sslip.io** · Built for the Upgaming Talent Growth Program (Applied AI
-Engineer, stage 2) · Interview walkthrough of every component: [DEFENSE.md](DEFENSE.md)
+Engineer, stage 2) · How every component works and why: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 An AI system that investigates questions across 62,000 documents and answers with a report you
 can check:
@@ -41,6 +41,30 @@ Full method, every configuration and the failure analysis: [EVALUATION.md](EVALU
 hour, and model spending is capped at $5 a day, so on a busy day it may say the budget is used up.
 A repeated question is answered from the cache instantly.
 
+## The brief, item by item
+
+| Requirement | Where |
+|---|---|
+| 3+ file formats, text + metadata | 8 formats: PDF, DOCX, HTML, Markdown, plain text, CSV, JSON, JSONL (`engine/ingest/loaders.py`) |
+| Chunking, 2 strategies compared | fixed windows vs structural sections (`engine/ingest/chunking.py`; EVALUATION.md §2, configs C vs D) |
+| Duplicates | exact hash + MinHash/LSH near-duplicates (`engine/ingest/dedup.py`) |
+| Add, update, delete documents | `/api/documents`, versioned and transactional (`engine/ingest/service.py`), Documents page |
+| Vector database, embeddings, semantic search | Postgres + pgvector (HNSW), bge-small embeddings (`engine/search/dense.py`) |
+| Hybrid search + an algorithm of our own | own BM25, own RRF, own id/date boost, second hop, per-file diversity (`engine/search/`) |
+| RAG, multi-step, combining documents | the agent loop with 6 tools (`engine/agent/investigator.py`, `tools.py`) |
+| Tool calling | Claude tool use with strict JSON schemas (`engine/agent/tools.py`) |
+| Citations and sources | every sentence cites passages; click to open the source (`web/index.html`) |
+| Contradictions | decided by code from recorded claims, with source authority (`engine/agent/claims.py`) |
+| Abstaining when evidence is missing | sentences without support are removed; nothing left = "not established" (`investigator.py`, `verify.py`) |
+| LLM errors and limits | typed errors, retries with backoff, step cap, rate limit, daily budget (`engine/llm/claude.py`, `engine/api/app.py`) |
+| 40+ test questions of every kind, Recall@K, MRR, correctness, citation accuracy, 2+ configurations, error analysis | 539 retrieval questions; 95 answer questions (43 company, 40 Wikipedia, 12 attacks) + 14 hand-written held-out; 14 retrieval configs, 3 LLMs; failure analysis ([EVALUATION.md](EVALUATION.md)) |
+| Python backend + working UI | FastAPI (`engine/api/app.py`) + one page (`web/index.html`) |
+| 50,000+ records, reproducible subset | 61,911 records: 54,937 HotpotQA paragraphs (seed 13) + 6,974 Meridian records (seed 7) |
+| Free hosting, public URL, persistence, secrets, costs and limits | Oracle Cloud Always Free ([DEPLOYMENT.md](DEPLOYMENT.md)) |
+| Tests | 85 tests, run by GitHub Actions on every push |
+| Bonus | 3 LLMs and 2 embedding models compared; agentic RAG; fused + routed re-ranking; prompt-injection red team; answer cache; streaming; Langfuse tracing; load test |
+| AI Usage Report | [AI_USAGE.md](AI_USAGE.md) |
+
 ## What's different about it
 
 1. **A company with known ground truth.** `data/world_gen.py` generates *Meridian Pay*, a
@@ -57,23 +81,26 @@ A repeated question is answered from the cache instantly.
    - A contradiction exists only when two cited passages give different values for the same
      fact, after normalising "220 minutes" = "3h 40m". The more authoritative source is preferred.
    - A sentence survives only if every id, date, time and number in it appears in what it cites.
-3. **Evaluation decides.** Seven retrieval configurations on 539 questions (no LLM, free,
+3. **Evaluation decides.** Fourteen retrieval configurations on 539 questions (no LLM, free,
    repeatable), plus an end-to-end answer evaluation that scores the verified report and the
    model's unverified draft from the same run.
 
 ## Architecture
 
 ```
-files ─► loaders (pdf, docx, html, md, csv, json, jsonl) ─► normalise ─► exact + near dedup
+files ─► loaders (pdf, docx, html, md, txt, csv, json, jsonl) ─► normalise ─► exact + near dedup
       ─► structural chunks ─► bge-small embeddings ─► Postgres + pgvector (HNSW)
 
-question ─► investigator loop (Claude, tool calling, max 10 steps)
+question ─► cache (question + documents version) ─► first search runs before the model is called
+         ─► investigator loop (Claude, tool calling, max 10 steps)
               ├─ search: own BM25 + pgvector ─► own RRF ─► own id/date boost ─► per-file diversity
-              │          └─ second hop: follow ids found in the top results
-              ├─ read_document, timeline
+              │          ├─ second hop: follow ids found in the top results
+              │          └─ cross-encoder re-ranking, only for questions with no ids or dates
+              ├─ read_document, timeline, list_incidents (complete lists, by scanning)
               └─ record_claims ─► claim ledger
           ─► submit_report ─► code: verify every sentence, compute contradictions, abstain if needed
-          ─► report: findings + citations, timeline, contradictions + verdict, unknowns, dropped sentences
+          ─► report: summary + citations, findings, contradictions + verdict, timeline, unknowns,
+             sentences the verifier removed  (streamed to the page step by step)
 ```
 
 | Module | What it does |
@@ -88,8 +115,10 @@ question ─► investigator loop (Claude, tool calling, max 10 steps)
 | `eval/` | retrieval eval, Langfuse experiments (`experiment.py`), red team, LLM judge, offline re-scoring, load test |
 | `data/` | the two corpus builders |
 | `deploy/` | server setup, service, proxy, backup, deploy script |
+| `tests/` | 85 tests: algorithms, ingestion, real Postgres, the agent loop with a scripted model |
+| `docs/` | images for this README |
 
-## Technical choices (details and rejected alternatives in DEFENSE.md)
+## Technical choices (details and rejected alternatives in ARCHITECTURE.md)
 
 | Choice | Why |
 |---|---|
@@ -98,23 +127,30 @@ question ─► investigator loop (Claude, tool calling, max 10 steps)
 | Structural chunks with a context line | `[Postmortem INC-2026-016 > Impact] Duration: 220 minutes` stays meaningful out of context |
 | MinHash + LSH (not SimHash) | Measured: SimHash missed all 7 planted near-duplicates on short texts; MinHash caught them all |
 | bge-small-en-v1.5 | Small enough for CPU hosting, strong for its size, free to run offline over 62k records |
+| Cross-encoder re-ranking, fused and routed | Replacing our order broke company search (0.776 → 0.438 recall@10); fused with our order and used only for questions without ids or dates, it is the best overall. The 4-layer model is 1.5× faster for 0.001 recall |
 | claude-opus-5-5, manual tool loop | A step cap, a per-step trace and cost accounting; the loop is explicit enough to explain line by line |
+| Oracle Cloud Always Free VM | 24 GB RAM for the models and Postgres on one free machine; the free tiers we checked had 512 MB or no outbound database access (DEPLOYMENT.md) |
 | Deterministic contradiction and grounding checks | Testable, explainable, and they can't hallucinate |
 
 ## Results (retrieval, `python -m eval.retrieval --hotpot 500`)
 
+Each row adds one step to the one above it; no language model is involved, so this is free and
+repeatable.
+
 | Config | HotpotQA recall@10 | HotpotQA MRR | Meridian recall@10 | Meridian MRR |
 |---|---|---|---|---|
-| A: fixed chunks, dense only | 0.842 | 0.922 | 0.173 | 0.099 |
-| B: fixed, BM25 only | 0.764 | 0.787 | 0.622 | 0.198 |
-| C: fixed, hybrid | 0.865 | 0.896 | 0.295 | 0.306 |
-| D: structural, hybrid | 0.864 | 0.921 | 0.357 | 0.291 |
-| E: D + id/date boost | 0.864 | 0.921 | 0.720 | 0.532 |
-| F: E + second hop | 0.864 | 0.921 | 0.720 | 0.665 |
-| **G: F + per-file diversity (default)** | 0.864 | 0.920 | **0.769** | 0.568 |
+| A: fixed chunks, meaning search only | 0.842 | 0.922 | 0.179 | 0.099 |
+| B: fixed chunks, keyword search (BM25) only | 0.764 | 0.787 | 0.635 | 0.198 |
+| C: fixed chunks, hybrid (RRF) | 0.865 | 0.896 | 0.308 | 0.306 |
+| D: structural chunks, hybrid | 0.864 | 0.921 | 0.363 | 0.291 |
+| E: D + id/date boost | 0.864 | 0.921 | 0.726 | 0.532 |
+| F: E + second hop following ids | 0.864 | 0.921 | 0.726 | 0.665 |
+| G: F + at most 2 passages per file | 0.864 | 0.920 | 0.776 | 0.568 |
+| H: G + cross-encoder replacing the order | 0.876 | 0.951 | 0.438 | 0.343 |
+| **Live: G + 4-layer cross-encoder, fused and routed** | **0.878** | **0.938** | **0.776** | **0.568** |
 
-**Routed re-ranking (H-routed) is now the default:** recall@10 0.878, MRR 0.914. The full table
-and analysis are in [EVALUATION.md](EVALUATION.md).
+The full table (14 configurations, including a second embedding model) and the analysis are in
+[EVALUATION.md](EVALUATION.md) §2.
 
 ## Results (answers, 95 questions per model, traced in Langfuse)
 
@@ -135,7 +171,7 @@ re-ranking, 2 searches/s on 4 ARM cores.
 ## Run locally
 
 ```bash
-uv sync                                         # Python 3.12
+uv sync && source .venv/bin/activate          # Python 3.12
 python -m data.hotpot_subset --questions 6000 --seed 13
 python -m data.world_gen --seed 7
 python -m eval.build_index --strategy structural fixed     # chunks + embeddings, ~7 min per strategy

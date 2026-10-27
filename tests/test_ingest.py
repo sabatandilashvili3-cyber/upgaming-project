@@ -41,7 +41,8 @@ def test_docx_roundtrip_headings_lists_tables():
     d.add_paragraph("Duration: 220 minutes", style="List Bullet")
     t = d.add_table(rows=1, cols=2)
     t.rows[0].cells[0].text, t.rows[0].cells[1].text = "ledger", "Payments Core"
-    buf = io.BytesIO(); d.save(buf)
+    buf = io.BytesIO()
+    d.save(buf)
     r = load_bytes(buf.getvalue(), "pm.docx")[0]
     assert "## Impact" in r.text and "- Duration: 220 minutes" in r.text and "ledger | Payments Core" in r.text
 

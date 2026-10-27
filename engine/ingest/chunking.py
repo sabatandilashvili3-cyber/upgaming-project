@@ -65,12 +65,14 @@ def chunk_structural(rec: Record, size: int = 200, overlap: int = 40):
             words = p.split()
             if len(words) > size:                       # one huge paragraph: window inside it
                 if buf:
-                    emit(heading, " ".join(buf)); buf = []
+                    emit(heading, " ".join(buf))
+                    buf = []
                 for w in _windows(words, size, overlap):
                     emit(heading, " ".join(w))
                 continue
             if len(buf) + len(words) > size and buf:
-                emit(heading, " ".join(buf)); buf = []
+                emit(heading, " ".join(buf))
+                buf = []
             buf.extend(words)
         if buf:
             emit(heading, " ".join(buf))

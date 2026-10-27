@@ -23,4 +23,5 @@ jobs:
       # CPU torch keeps the install small; the tests never load the embedding model
       - run: uv pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
       - run: grep -v -E "^(torch|nvidia-|triton|cuda-)" requirements.txt > req.txt && uv pip install -r req.txt pytest
+      - run: uvx ruff check .            # lint rules in pyproject.toml
       - run: python -m pytest -q

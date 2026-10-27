@@ -241,7 +241,8 @@ class World:
             v = self._ver[c.service]
             if c.type == "deploy":
                 if self.r.random() < 0.15:
-                    v[1] += 1; v[2] = 0
+                    v[1] += 1
+                    v[2] = 0
                 else:
                     v[2] += 1
             c.version = "v%d.%d.%d" % tuple(v)

@@ -1,11 +1,13 @@
 # Deployment
 
+**Live:** https://130-61-72-51.sslip.io
+
 ## Architecture
 
 ```
  browser ──HTTPS──► Caddy :443 ──► uvicorn :8000 (FastAPI, systemd "engine") ──► Postgres 16 + pgvector
                   (auto certificate,        │  in-memory BM25 index,                (same VM, local disk)
-                   <ip>.sslip.io)           │  bge-small embedder (CPU)
+                   <ip>.sslip.io)           │  bge-small embedder + cross-encoder re-ranker (CPU)
                                             └──HTTPS──► Anthropic API (claude-opus-5-5)
 ```
 
@@ -26,7 +28,7 @@ Ubuntu 24.04, 200 GB block storage. No paid infrastructure; the only spend is th
 |---|---|
 | Public URL | `https://<ip-with-dashes>.sslip.io`. sslip.io resolves any such name to the IP, so Caddy can get a Let's Encrypt certificate without buying a domain |
 | Hosting + database integration | The app connects to local Postgres through a connection pool that checks each connection before use |
-| Data survives restarts | Postgres stores data on the VM's boot volume. The app is stateless: it rebuilds BM25 from the database at start (about 20 s) |
+| Data survives restarts | Postgres stores data on the VM's boot volume. The app is stateless: it rebuilds the BM25 index from the database at start (about 7 s; the model client is ready about 15 s after a restart) |
 | Secrets protected | They live in `/etc/engine.env` (mode 600, never in git), loaded by systemd. `.env` is git-ignored locally |
 | Abuse and cost control | Per-client hourly limit, a daily LLM budget enforced from the `traces` table, and an admin token for uploads and deletes |
 | Backups | Nightly `pg_dump`, the last 7 kept in `/home/ubuntu/backups` |

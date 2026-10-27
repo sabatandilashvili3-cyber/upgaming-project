@@ -35,3 +35,10 @@ dev = [
     "pgserver>=0.1.4",
     "pytest>=9.1.1",
 ]
+
+[tool.ruff]
+extend-exclude = ["data/corpus", "data/raw"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]          # long lines are allowed; everything else is enforced in CI

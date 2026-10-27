@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_queries(n=300, seed=3):
-    qs = [json.loads(l)["question"] for l in open(ROOT / "data/corpus/hotpot_questions.jsonl")]
-    qs += [json.loads(l)["question"] for l in open(ROOT / "data/corpus/world/world_questions.jsonl")]
+    qs = [json.loads(line)["question"] for line in open(ROOT / "data/corpus/hotpot_questions.jsonl")]
+    qs += [json.loads(line)["question"] for line in open(ROOT / "data/corpus/world/world_questions.jsonl")]
     qs += ["CHG-3340", "ledger connection pool", "payment delays in March 2026", "INC-2026-016 duration"]
     return random.Random(seed).sample(qs, min(n, len(qs)))
 
@@ -43,7 +43,8 @@ async def search_level(base, concurrency, seconds, queries):
             nonlocal errors
             k = i
             while time.time() < stop:
-                q = queries[k % len(queries)]; k += concurrency
+                q = queries[k % len(queries)]
+                k += concurrency
                 t = time.perf_counter()
                 try:
                     r = await client.post("/api/search", json={"query": q, "k": 10})

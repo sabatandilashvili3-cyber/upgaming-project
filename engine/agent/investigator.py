@@ -14,6 +14,8 @@
 The loop is capped (MAX_STEPS) so a confused model cannot run up cost forever. The model
 writes the report; code decides what survives in it.
 """
+import hashlib
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -82,7 +84,6 @@ def prefetch_query(question: str, history) -> str:
 def cache_key(question: str, model: str, effort: str, corpus_version: str, history=()) -> str:
     """Same question + same model settings + same prompt and tools + same documents = same report.
     The corpus version changes on every upload/delete, so a cached answer never outlives its evidence."""
-    import hashlib, json
     norm = " ".join(question.lower().split())
     prompt = hashlib.sha256((SYSTEM + json.dumps([t.schema for t in TOOLS], sort_keys=True)).encode()).hexdigest()[:16]
     return hashlib.sha256(json.dumps([norm, model, effort, prompt, corpus_version, list(history)]).encode()).hexdigest()

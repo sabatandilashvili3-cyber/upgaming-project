@@ -1,9 +1,9 @@
-# How the engine works: a step-by-step guide for the interview
+# Architecture and design decisions
 
-Each section answers four questions, in the order an interviewer usually asks them:
-**What does it do? How does it work? Why this way and not another? What could go wrong?**
-Numbers come from real runs, not estimates. Code paths are given so you can open the file
-and point at the line.
+How every component works, why it was built this way, and what was tried and rejected.
+Each section answers four questions: **What does it do? How does it work? Why this way and not
+another? What could go wrong?** Numbers come from real runs, not estimates, and every section
+names the file it describes.
 
 ---
 
@@ -306,6 +306,30 @@ words only, and a bare "May" counts only after "in/during/since".
 
 ---
 
+## 8b. Re-ranking: a second opinion, used only where it helps — `engine/search/rerank.py`
+
+**What it does:** re-orders the top 15 passages with a cross-encoder.
+
+**How it works:** the embedder turns the question and each passage into vectors *separately*,
+which is what makes searching 63k chunks fast. A cross-encoder reads the question and one passage
+*together* and outputs a relevance score, so it sees that "which change caused INC-2026-004" and
+"Root cause: CHG-2458" belong together. It is far too slow for 63k passages, so it only looks at
+the 15 that hybrid search already found: cheap recall first, expensive precision second.
+
+**Why this way:**
+- **Fused, not replacing.** Its order is merged with ours by RRF. Replacing our order lifted
+  Wikipedia (MRR 0.920 → 0.951) and broke company search (recall@10 0.776 → 0.438): a model trained
+  on web queries can't see that `CHG-2458` or "March 2026" matter, and its order threw away the
+  id/date boost.
+- **Routed.** Questions with ids or dates skip it entirely; there, the boost already does the job.
+  Fused + routed is the best configuration overall.
+- **Small.** `ms-marco-MiniLM-L-4-v2`, 15 candidates × 256 tokens. Measured on 539 questions: the
+  6-layer model was 1.5× slower for 0.001 more recall@10; int8 quantisation was slower on the ARM
+  server.
+
+**What could go wrong:** on CPU it is ~93% of a re-ranked search's time (about 0.5 s), so it is
+the throughput limit (2 searches/s on 4 cores; EVALUATION.md §7b).
+
 ## 9. Storage: Postgres + pgvector — `engine/store/schema.sql`, `db.py`
 
 **Why one Postgres instead of a separate vector database:** documents, versions, chunks,
@@ -425,7 +449,7 @@ The whole corpus (Wikipedia + company, ~62k records) is searched for every quest
 | F | E + second hop following ids | 0.864 | 0.921 | 0.483 | 0.720 | **0.665** |
 | G | F + max 2 rows per file in front | 0.864 | 0.920 | **0.628** | **0.769** | 0.568 |
 
-**What the numbers say (each is a sentence you can say in the interview):**
+**What the numbers say:**
 - **Embeddings alone fail on investigations.** On HotpotQA dense search is strong (MRR 0.92),
   but on Meridian it finds 17% of the evidence: ids and dates are noise to a sentence model.
   BM25 alone finds 62%.
@@ -463,7 +487,7 @@ kept copy, so dedup never counts as a miss.
 
 ---
 
-## 13. Tests — `tests/` (38 passing)
+## 13. Tests — `tests/` (85 passing, run in CI on every push)
 
 - **Algorithms:** BM25 against a hand-computed score, RRF agreement, boost ordering, dense
   nearest neighbour.
@@ -477,7 +501,7 @@ kept copy, so dedup never counts as a miss.
 
 ---
 
-## 14. Questions they'll probably ask, with short answers
+## 14. Frequently asked questions
 
 **"Why not LangChain?"**
 The brief asks for an algorithm of my own and says the search can't rely only on ready-made
@@ -632,7 +656,7 @@ That's about 300 MB, then measure that retrieval quality is unchanged.
 - **Cloudflare gotcha:** Python's default `urllib` user-agent gets HTTP 403 "error 1010" from the
   Cloudflare in front of Langfuse. A normal user-agent fixes it.
 
-## 20. What the evaluations changed (each is a story for the interview)
+## 20. What the evaluations changed
 
 | Finding | How it was found | What changed |
 |---|---|---|
@@ -726,7 +750,7 @@ with structured output) into an incidents table, and `list_incidents` would read
   partial or product-name service lists are not contradictions.
 - Measured on the same saved outputs, $0: planted found Opus 7→9/9, Sonnet 3→7/9, Haiku 2→9/9;
   false-looking flags 37/7/8 → 3/0/0 (the 3 are the planted injection losing on authority).
-- **Interview line:** "Before blaming the model, look at what it actually produced."
+- **Lesson:** before blaming the model, look at what it actually produced.
 
 **2. Throughput: profile first.** The cross-encoder is ~93% of a re-ranked search. int8
 quantisation sounded right and was *slower* on ARM (569 vs 347 ms). A 4-layer cross-encoder
@@ -741,7 +765,11 @@ designed while reading these failures, which is why there is a hand-written held
 **4. Held-out set.** 14 questions written by hand after the build (`eval/heldout_questions.jsonl`),
 never used for tuning, run as a Langfuse experiment (EVALUATION.md §3b).
 
-## Still to do
-- the short-answer prompt (the bare span, for HotpotQA EM/F1);
-- make claim recording mandatory for cheaper models;
-- push to GitHub and fill in the AI usage report's own sections.
+## Next steps
+
+- **Extract incident fields at ingest.** `list_incidents` reads severity, dates and services with
+  patterns; free-text postmortems would need a one-time structured extraction into a table.
+- **A bare short-answer prompt** for HotpotQA, so exact-match scores stop losing points to
+  qualified answers ("37,776 (Fall 2016)").
+- **Incremental BM25** instead of rebuilding the in-memory index after every upload.
+- **The re-ranker as its own service** (or on a GPU) if traffic grows; see EVALUATION.md §7b.

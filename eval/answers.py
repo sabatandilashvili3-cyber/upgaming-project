@@ -191,7 +191,7 @@ def main():
     retriever = Retriever(chunks, vecs, Embedder())
     tag = f"{a.model}_{a.effort}"
     out_rows = RESULTS / f"answers_rows_{tag}.jsonl"
-    done = {json.loads(l)["qid"] for l in open(out_rows)} if out_rows.exists() else set()   # resume
+    done = {json.loads(line)["qid"] for line in open(out_rows)} if out_rows.exists() else set()   # resume
     with open(out_rows, "a") as f:
         for i, q in enumerate(questions, 1):
             if q["qid"] in done:
@@ -211,7 +211,7 @@ def main():
             f.flush()
             print(f"[{i}/{len(questions)}] {q['qid']:12} {inv.status:9} correct={row['verified']['answer_correct']} "
                   f"${inv.cost_usd:.3f} {inv.latency_ms / 1000:.0f}s")
-    rows = [json.loads(l) for l in open(out_rows)]
+    rows = [json.loads(line) for line in open(out_rows)]
     summary = {"verified": summarise(rows, "verified"), "unverified": summarise(rows, "unverified")}
     (RESULTS / f"answers_summary_{tag}.json").write_text(json.dumps(summary, indent=1))
     for variant, groups in summary.items():
